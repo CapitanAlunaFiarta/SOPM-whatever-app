@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: whatever-user-service
+    runtime: docker
+    rootDir: backend/user-service
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://whatever-app-unitbv.me
+
+  - type: web
+    name: whatever-task-service
+    runtime: docker
+    rootDir: backend/task-service
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/tasks/health
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://whatever-app-unitbv.me
