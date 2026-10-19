@@ -2,6 +2,7 @@ services:
   - type: web
     name: whatever-user-service
     runtime: docker
+    plan: free
     rootDir: backend/user-service
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
@@ -24,6 +25,7 @@ services:
   - type: web
     name: whatever-task-service
     runtime: docker
+    plan: free
     rootDir: backend/task-service
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/tasks/health
