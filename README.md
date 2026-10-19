@@ -39,6 +39,8 @@ Netlify găzduiește frontend-ul, iar Render rulează cele două servicii Docker
 
 `https://whatever-app-unitbv.me` este doar domeniul frontend-ului. URL-urile Render rămân API-urile backend; schimbarea lor în Netlify necesită un nou deploy frontend deoarece Vite le compilează la build.
 
+Pentru Supabase Session Pooler, serviciile folosesc implicit maximum 3 conexiuni Hikari fiecare și minimum 0 conexiuni idle, pentru a rămâne în limita planului gratuit. Dacă apar erori `max clients reached`, verifică să nu existe alte servicii/conexiuni active și nu mări `DB_POOL_MAX_SIZE`.
+
 ### Resetare parolă și WebAuthn
 
 Resetarea parolei nu returnează tokenul prin API. User-service generează un cod temporar de 15 minute și îl trimite prin Gmail SMTP. WebAuthn folosește challenge-uri persistate în PostgreSQL și verifică server-side origin-ul, challenge-ul, credential publică, semnătura și counter-ul. Pentru task-urile care cer biometrie, task-service acceptă numai tokenul biometric semnat după o assertion validă; un câmp boolean trimis din browser nu este acceptat.
