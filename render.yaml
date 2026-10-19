@@ -21,6 +21,22 @@ services:
         sync: false
       - key: CORS_ORIGIN
         value: https://whatever-app-unitbv.me
+      - key: MAIL_HOST
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: PUBLIC_URL
+        value: https://whatever-app-unitbv.me
+      - key: WEBAUTHN_RP_ID
+        value: whatever-app-unitbv.me
+      - key: WEBAUTHN_ORIGIN
+        value: https://whatever-app-unitbv.me
 
   - type: web
     name: whatever-task-service

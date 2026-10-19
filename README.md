@@ -27,12 +27,21 @@ Netlify găzduiește frontend-ul, iar Render rulează cele două servicii Docker
 
 1. Creează o bază PostgreSQL public accesibilă într-un proiect Supabase și rulează [database/init.sql](./database/init.sql) o singură dată în SQL Editor.
 2. Creează serviciile Render din [render.yaml](./render.yaml). Pentru ambele servicii setează `DB_URL`, `DB_USER`, `DB_PASSWORD` și aceeași valoare random pentru `JWT_SECRET`. La user-service setează și `ADMIN_EMAIL` și `ADMIN_PASSWORD`.
-3. După deploy, copiază URL-urile Render în variabilele Netlify `VITE_USER_API` și `VITE_TASK_API`, cu sufixul `/api`. Nu le pune în `.env` comis în Git.
-4. În Netlify setează base directory `web-app`, build command `npm run build` și publish directory `web-app/dist`; aceste valori sunt deja în [netlify.toml](./netlify.toml).
-5. Adaugă în Netlify domeniul `whatever-app-unitbv.me`. În Namecheap, aplică exact înregistrările DNS afișate de Netlify pentru domeniul apex și `www`; nu inventa valori și elimină duplicatele A/CNAME care intră în conflict.
-6. După propagarea DNS, setează în Render `CORS_ORIGIN=https://whatever-app-unitbv.me`, apoi redeploy ambele servicii.
+3. Pentru resetarea parolei, creează un App Password în Gmail (Google Account → Security → 2-Step Verification → App passwords) și setează în Render la user-service:
+   - `MAIL_USERNAME` = adresa Gmail;
+   - `MAIL_PASSWORD` = App Password Gmail de 16 caractere, nu parola contului;
+   - `MAIL_FROM` = aceeași adresă Gmail.
+   Nu pune App Password-ul în GitHub, Netlify sau în frontend.
+4. După deploy, copiază URL-urile Render în variabilele Netlify `VITE_USER_API` și `VITE_TASK_API`, cu sufixul `/api`. Nu le pune în `.env` comis în Git.
+5. În Netlify setează base directory `web-app`, build command `npm run build` și publish directory `web-app/dist`; aceste valori sunt deja în [netlify.toml](./netlify.toml).
+6. Adaugă în Netlify domeniul `whatever-app-unitbv.me`. În Namecheap, aplică exact înregistrările DNS afișate de Netlify pentru domeniul apex și `www`; nu inventa valori și elimină duplicatele A/CNAME care intră în conflict.
+7. După propagarea DNS, setează în Render `CORS_ORIGIN=https://whatever-app-unitbv.me`, `PUBLIC_URL=https://whatever-app-unitbv.me`, `WEBAUTHN_RP_ID=whatever-app-unitbv.me` și `WEBAUTHN_ORIGIN=https://whatever-app-unitbv.me`, apoi redeploy ambele servicii.
 
 `https://whatever-app-unitbv.me` este doar domeniul frontend-ului. URL-urile Render rămân API-urile backend; schimbarea lor în Netlify necesită un nou deploy frontend deoarece Vite le compilează la build.
+
+### Resetare parolă și WebAuthn
+
+Resetarea parolei nu returnează tokenul prin API. User-service generează un cod temporar de 15 minute și îl trimite prin Gmail SMTP. WebAuthn folosește challenge-uri persistate în PostgreSQL și verifică server-side origin-ul, challenge-ul, credential publică, semnătura și counter-ul. Pentru task-urile care cer biometrie, task-service acceptă numai tokenul biometric semnat după o assertion validă; un câmp boolean trimis din browser nu este acceptat.
 
 ### Variabile PostgreSQL pentru Render
 
