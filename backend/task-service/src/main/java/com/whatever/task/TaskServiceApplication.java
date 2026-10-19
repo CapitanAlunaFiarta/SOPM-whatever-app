@@ -33,13 +33,12 @@ public class TaskServiceApplication {
     @GetMapping
     public List<Map<String, Object>> list(@RequestHeader("Authorization") String authorization) {
         Token token = requireToken(authorization);
-        return db.queryForList("""
-            SELECT id,title,category,priority,status,is_recurring AS "isRecurring",streak_count AS "streakCount",
-                   requires_location AS "requiresLocation",latitude,longitude,allowed_radius_meters AS radius,
-                   requires_biometrics AS "requiresBiometrics",due_date AS "dueDate",owner_email AS "ownerEmail",
-                   shared_with_friend AS friend FROM tasks
-            WHERE owner_email=? OR shared_with_friend IN (SELECT username FROM users WHERE email=?)
-            ORDER BY id DESC""", token.email(), token.email());
+        return db.queryForList("SELECT id,title,category,priority,status,is_recurring AS \"isRecurring\","
+                + "streak_count AS \"streakCount\",requires_location AS \"requiresLocation\",latitude,longitude,"
+                + "allowed_radius_meters AS radius,requires_biometrics AS \"requiresBiometrics\","
+                + "due_date AS \"dueDate\",owner_email AS \"ownerEmail\",shared_with_friend AS friend FROM tasks "
+                + "WHERE owner_email=? OR shared_with_friend IN (SELECT username FROM users WHERE email=?) "
+                + "ORDER BY id DESC", token.email(), token.email());
     }
 
     @GetMapping("/health")
@@ -51,9 +50,9 @@ public class TaskServiceApplication {
     @PostMapping
     public Map<String, Object> create(@RequestHeader("Authorization") String authorization, @Valid @RequestBody TaskRequest request) {
         Token token = requireToken(authorization);
-        db.update("""INSERT INTO tasks(title,category,priority,status,is_recurring,requires_location,latitude,longitude,
-                  allowed_radius_meters,requires_biometrics,due_date,owner_email,shared_with_friend)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""", request.title().trim(), request.category(), request.priority(), "Upcoming",
+        db.update("INSERT INTO tasks(title,category,priority,status,is_recurring,requires_location,latitude,longitude,"
+                        + "allowed_radius_meters,requires_biometrics,due_date,owner_email,shared_with_friend)"
+                        + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", request.title().trim(), request.category(), request.priority(), "Upcoming",
                 request.isRecurring(), request.requiresLocation(), request.latitude(), request.longitude(), request.radius(),
                 request.requiresBiometrics(), request.dueDate(), token.email(), request.friend() == null ? "" : request.friend().trim());
         return db.queryForMap("SELECT id,title,category,priority,status,owner_email AS \"ownerEmail\" FROM tasks WHERE owner_email=? ORDER BY id DESC LIMIT 1", token.email());
