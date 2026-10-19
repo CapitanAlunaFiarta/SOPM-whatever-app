@@ -156,7 +156,9 @@ public class TaskServiceApplication {
     }
     @Bean WebMvcConfigurer cors(@Value("${app.cors-origin}") String origin) {
         return new WebMvcConfigurer() { public void addCorsMappings(CorsRegistry registry) {
-            registry.addMapping("/**").allowedOrigins(origin).allowedMethods("GET","POST","PUT","DELETE","OPTIONS").allowedHeaders("*");
+            registry.addMapping("/**").allowedOrigins(Arrays.stream(origin.split(","))
+                    .map(String::trim).filter(value -> !value.isEmpty()).toArray(String[]::new))
+                    .allowedMethods("GET","POST","PUT","DELETE","OPTIONS").allowedHeaders("*");
         }};
     }
     public record TaskRequest(@NotBlank @Size(max=255) String title, @NotBlank String category, @NotBlank String priority,

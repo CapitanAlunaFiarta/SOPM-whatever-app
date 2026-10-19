@@ -35,7 +35,7 @@ Netlify găzduiește frontend-ul, iar Render rulează cele două servicii Docker
 4. După deploy, copiază URL-urile Render în variabilele Netlify `VITE_USER_API` și `VITE_TASK_API`, cu sufixul `/api`. Nu le pune în `.env` comis în Git.
 5. În Netlify setează base directory `web-app`, build command `npm run build` și publish directory `web-app/dist`; aceste valori sunt deja în [netlify.toml](./netlify.toml).
 6. Adaugă în Netlify domeniul `whatever-app-unitbv.me`. În Namecheap, aplică exact înregistrările DNS afișate de Netlify pentru domeniul apex și `www`; nu inventa valori și elimină duplicatele A/CNAME care intră în conflict.
-7. După propagarea DNS, setează în Render `CORS_ORIGIN=https://whatever-app-unitbv.me`, `PUBLIC_URL=https://whatever-app-unitbv.me`, `WEBAUTHN_RP_ID=whatever-app-unitbv.me` și `WEBAUTHN_ORIGIN=https://whatever-app-unitbv.me`, apoi redeploy ambele servicii.
+7. După propagarea DNS, setează în Render `CORS_ORIGIN=https://whatever-app-unitbv.me,https://www.whatever-app-unitbv.me`, `PUBLIC_URL=https://whatever-app-unitbv.me`, `WEBAUTHN_RP_ID=whatever-app-unitbv.me` și `WEBAUTHN_ORIGIN=https://whatever-app-unitbv.me,https://www.whatever-app-unitbv.me`, apoi redeploy ambele servicii. Dacă Netlify folosește doar domeniul apex, poți păstra doar prima valoare.
 
 `https://whatever-app-unitbv.me` este doar domeniul frontend-ului. URL-urile Render rămân API-urile backend; schimbarea lor în Netlify necesită un nou deploy frontend deoarece Vite le compilează la build.
 

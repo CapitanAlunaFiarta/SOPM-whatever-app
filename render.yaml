@@ -20,7 +20,7 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: CORS_ORIGIN
-        value: https://whatever-app-unitbv.me
+        value: https://whatever-app-unitbv.me,https://www.whatever-app-unitbv.me
       - key: MAIL_HOST
         value: smtp.gmail.com
       - key: MAIL_PORT
@@ -36,7 +36,7 @@ services:
       - key: WEBAUTHN_RP_ID
         value: whatever-app-unitbv.me
       - key: WEBAUTHN_ORIGIN
-        value: https://whatever-app-unitbv.me
+        value: https://whatever-app-unitbv.me,https://www.whatever-app-unitbv.me
 
   - type: web
     name: whatever-task-service
@@ -55,4 +55,4 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: CORS_ORIGIN
-        value: https://whatever-app-unitbv.me
+        value: https://whatever-app-unitbv.me,https://www.whatever-app-unitbv.me

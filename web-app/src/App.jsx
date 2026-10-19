@@ -50,10 +50,15 @@ function browserRequestOptions(options) {
 }
 
 async function request(url, options = {}, token) {
-  const response = await fetch(url, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }
+    });
+  } catch {
+    throw new Error(`Serverul nu poate fi contactat. Verifică în Netlify VITE_USER_API/VITE_TASK_API și CORS_ORIGIN în Render. URL încercat: ${url}`);
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || 'Server error');
   return body;
@@ -139,16 +144,34 @@ export default function App() {
     } catch (e) { setError(e.message); }
   };
 
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) { setError('Browserul nu oferă geolocație.'); return; }
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        updateDraft('latitude', Number(position.coords.latitude.toFixed(5)));
-        updateDraft('longitude', Number(position.coords.longitude.toFixed(5)));
-        setShowMap(true); notify('Pinul a fost mutat pe locația curentă.');
-      },
-      () => setError('Locația nu a fost acordată. Permite accesul GPS în browser.')
-    );
+  const getCurrentPosition = (purpose) => new Promise((resolve, reject) => {
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+      reject(new Error('GPS-ul funcționează doar pe HTTPS. Deschide aplicația prin domeniul HTTPS, nu printr-un preview HTTP.'));
+      return;
+    }
+    if (!navigator.geolocation) {
+      reject(new Error('Browserul nu oferă geolocație.'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, positionError => {
+      const messages = {
+        1: 'Accesul la locație a fost blocat. Permite Location pentru acest site din setările browserului.',
+        2: 'Locația nu este disponibilă. Activează GPS-ul și încearcă din nou.',
+        3: 'Cererea GPS a expirat. Mută-te într-un loc cu semnal mai bun și încearcă din nou.'
+      };
+      reject(new Error(`${purpose}: ${messages[positionError.code] || 'locația nu a putut fi citită.'}`));
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+
+  const useCurrentLocation = async () => {
+    try {
+      const position = await getCurrentPosition('Locația nu a putut fi obținută');
+      updateDraft('latitude', Number(position.coords.latitude.toFixed(5)));
+      updateDraft('longitude', Number(position.coords.longitude.toFixed(5)));
+      setShowMap(true); notify('Pinul a fost mutat pe locația curentă.');
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   const saveTask = async event => {
@@ -167,9 +190,7 @@ export default function App() {
     try {
       let latitude = 0; let longitude = 0;
       if (task.requiresLocation) {
-        const position = await new Promise((resolve, reject) => navigator.geolocation
-          ? navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error('Permite accesul la locație pentru a confirma task-ul.')), { enableHighAccuracy: true, timeout: 15000 })
-          : reject(new Error('Browserul nu oferă geolocație.')));
+        const position = await getCurrentPosition('Locația este necesară pentru confirmarea task-ului');
         latitude = position.coords.latitude; longitude = position.coords.longitude;
       }
       let biometricToken;
@@ -186,7 +207,13 @@ export default function App() {
         method: 'POST', body: JSON.stringify({ latitude, longitude, biometricToken })
       }, token);
       await loadData(); notify('Task confirmat și sincronizat.');
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
+    } catch (e) {
+      if (e.name === 'NotAllowedError') {
+        setError('Biometria a fost refuzată sau a expirat. Apasă Confirmă din nou și acceptă amprenta/Face ID; dacă nu ai activat Passkey-ul, activează-l din Cont.');
+      } else {
+        setError(e.message);
+      }
+    } finally { setBusy(false); }
   };
 
   const deleteTask = async id => {
@@ -214,7 +241,13 @@ export default function App() {
         method: 'POST', body: JSON.stringify({ credentialJson: credentialJson(credential) })
       }, token);
       notify('Passkey-ul a fost activat pentru cont.');
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.name === 'NotAllowedError') {
+        setError('Activarea biometriei a fost anulată sau nu este permisă de browser. Folosește HTTPS și activează Passkey-ul pe acest dispozitiv.');
+      } else {
+        setError(e.message);
+      }
+    }
   };
 
   const adminAction = async (email, action, body) => {

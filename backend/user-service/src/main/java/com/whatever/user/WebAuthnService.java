@@ -48,7 +48,8 @@ public class WebAuthnService {
         this.relyingParty = RelyingParty.builder()
                 .identity(RelyingPartyIdentity.builder().id(rpId).name("Whatever").build())
                 .credentialRepository(credentials)
-                .origins(Set.of(origin))
+                .origins(Arrays.stream(origin.split(","))
+                        .map(String::trim).filter(value -> !value.isEmpty()).collect(Collectors.toSet()))
                 .build();
     }
 
