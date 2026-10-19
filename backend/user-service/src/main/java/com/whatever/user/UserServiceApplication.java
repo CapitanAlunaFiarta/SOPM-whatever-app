@@ -8,14 +8,10 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -148,11 +144,7 @@ public class UserServiceApplication {
     private record Token(String email, String role) {}
     private static String normalizeEmail(String value) { return value == null ? "" : value.trim().toLowerCase(Locale.ROOT); }
 
-    @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
-    @Bean SecurityFilterChain security(HttpSecurity http) throws Exception {
-        return http.csrf(csrf -> csrf.disable()).authorizeHttpRequests(auth -> auth.anyRequest().permitAll()).build();
-    }
-    @Bean WebMvcConfigurer cors(@Value("${app.cors-origin}") String origin) {
+    @org.springframework.context.annotation.Bean WebMvcConfigurer cors(@Value("${app.cors-origin}") String origin) {
         return new WebMvcConfigurer() { public void addCorsMappings(CorsRegistry registry) {
             registry.addMapping("/**").allowedOrigins(origin).allowedMethods("GET","POST","DELETE","OPTIONS").allowedHeaders("*");
         }};
