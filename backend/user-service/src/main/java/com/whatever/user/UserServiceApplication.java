@@ -48,7 +48,8 @@ public class UserServiceApplication {
     @PostConstruct
     void seedAdmin() {
         if (adminPassword == null || adminPassword.length() < 12) throw new IllegalStateException("ADMIN_PASSWORD must be at least 12 characters");
-        if (db.queryForObject("SELECT COUNT(*) FROM users WHERE email=?", Integer.class, adminEmail) == 0) {
+        Number existingAdminCount = db.queryForObject("SELECT COUNT(*) FROM users WHERE email=?", Number.class, adminEmail);
+        if (existingAdminCount == null || existingAdminCount.longValue() == 0) {
             db.update("INSERT INTO users(full_name,username,email,password_hash,role,streak,streak_freezes_left,biometric_enabled) VALUES(?,?,?,?,?,?,?,?)",
                     "Administrator", "sebi_admin", adminEmail, encoder.encode(adminPassword), "ADMIN", 0, 3, false);
         } else {
@@ -96,7 +97,7 @@ public class UserServiceApplication {
     @GetMapping("/chat")
     public List<Map<String, Object>> chat(@RequestHeader("Authorization") String authorization) {
         requireToken(authorization);
-        return db.queryForList("SELECT id,sender_username AS senderUsername,sender_name AS senderName,sender_role AS senderRole,message_text AS text,sent_at AS time FROM chat_messages ORDER BY id DESC LIMIT 200");
+        return db.queryForList("SELECT id,sender_username AS \"senderUsername\",sender_name AS \"senderName\",sender_role AS \"senderRole\",message_text AS text,sent_at AS time FROM chat_messages ORDER BY id DESC LIMIT 200");
     }
 
     @PostMapping("/chat")

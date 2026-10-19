@@ -1,19 +1,18 @@
 services:
-  mysql-db:
-    image: mysql:8.0
-    container_name: whatever-mysql
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: whatever-postgres
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
-      MYSQL_DATABASE: whatever_db
-      MYSQL_USER: whatever_app
-      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_DB: whatever_db
+      POSTGRES_USER: ${DB_USER:?Set DB_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql-data:/var/lib/mysql
+      - postgres-data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -22,6 +21,8 @@ services:
     build: ./backend/user-service
     container_name: whatever-user-service
     environment:
+      DB_URL: jdbc:postgresql://postgres-db:5432/whatever_db
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
@@ -29,20 +30,22 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     ports: ["8081:8080"]
     depends_on:
-      mysql-db:
+      postgres-db:
         condition: service_healthy
 
   task-service:
     build: ./backend/task-service
     container_name: whatever-task-service
     environment:
+      DB_URL: jdbc:postgresql://postgres-db:5432/whatever_db
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     ports: ["8082:8080"]
     depends_on:
-      mysql-db:
+      postgres-db:
         condition: service_healthy
 
 volumes:
-  mysql-data:
+  postgres-data:
