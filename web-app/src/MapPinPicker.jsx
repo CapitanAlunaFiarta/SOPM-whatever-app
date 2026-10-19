@@ -1,4 +1,16 @@
 import React, { useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow
+});
 
 export default function MapPinPicker({ latitude, longitude, radius, onChangeCoords }) {
   const mapContainerRef = useRef(null);
@@ -7,21 +19,21 @@ export default function MapPinPicker({ latitude, longitude, radius, onChangeCoor
   const circleRef = useRef(null);
 
   useEffect(() => {
-    if (!window.L || !mapContainerRef.current || mapInstanceRef.current) return;
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
 
     const startLat = parseFloat(latitude) || 45.6525;
     const startLng = parseFloat(longitude) || 25.5888;
     const startRadius = Number(radius) || 150;
 
-    const map = window.L.map(mapContainerRef.current).setView([startLat, startLng], 15);
+    const map = L.map(mapContainerRef.current).setView([startLat, startLng], 15);
 
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    const marker = window.L.marker([startLat, startLng], { draggable: true }).addTo(map);
-    const circle = window.L.circle([startLat, startLng], {
+    const marker = L.marker([startLat, startLng], { draggable: true }).addTo(map);
+    const circle = L.circle([startLat, startLng], {
       color: '#38bdf8',
       fillColor: '#0284c7',
       fillOpacity: 0.22,
