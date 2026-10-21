@@ -71,7 +71,7 @@ const emptyDraft = {
 };
 
 function StatCard({ label, value, tone, hint }) {
-  return <div className={`stat-card ${tone || ''}`}><span>{label}</span><strong>{value}</strong>{hint && <small>{hint}</small>}</div>;
+  return <div className={`stat-card ${tone || ''}`}><span className="stat-label-text">{label}</span><strong className="stat-value">{value}</strong>{hint && <small className="stat-hint">{hint}</small>}</div>;
 }
 
 export default function App() {
@@ -278,7 +278,7 @@ export default function App() {
     <PwaInstallBanner />
     <header className="app-header">
       <div className="brand-box"><img src={logo} alt="Whatever" className="brand-logo" /><div><h1>WHATEVER</h1><p>Planifică. Acționează. Progresează.</p></div></div>
-      <div className="header-actions"><span className="user-chip"><b>{session.user.fullName}</b><small>{isAdmin ? 'Super Administrator' : `@${session.user.username}`}</small></span><button className="btn-primary" onClick={registerBiometric}>🔐 Passkey</button><button className="btn-logout" onClick={() => setSession(null)}>Ieșire</button></div>
+      <div className="header-actions"><span className="user-chip"><b>{session.user.fullName}</b><small>{isAdmin ? 'Super Administrator' : `@${session.user.username}`}</small></span><div className="header-security-actions"><span className={`role-badge ${isAdmin ? 'role-admin' : 'role-user'}`}>{isAdmin ? 'Super Administrator' : 'Administrator'}</span><button className="passkey-button" onClick={registerBiometric}>🔐 Passkey</button></div><button className="btn-logout" onClick={() => setSession(null)}>Ieșire</button></div>
     </header>
     <nav className="top-navigation">
       <button className={activeNav === 'overview' ? 'active' : ''} onClick={() => setActiveNav('overview')}>▦ Overview</button>
@@ -286,7 +286,7 @@ export default function App() {
       <button className={activeNav === 'chat' ? 'active' : ''} onClick={() => setActiveNav('chat')}>◌ Comunitate</button>
       {isAdmin && <button className={`admin-nav-btn ${activeNav === 'admin' ? 'active' : ''}`} onClick={() => setActiveNav('admin')}>⚙ Admin</button>}
     </nav>
-    {error && <div className="alert error">{error}<button onClick={() => setError('')}>×</button></div>}
+    {error && <div className="alert error app-alert"><span>{error}</span><button className="alert-close" aria-label="Închide mesajul" onClick={() => setError('')}>×</button></div>}
     {notice && <div className="alert success">{notice}</div>}
     {activeNav === 'overview' && <Overview {...{ stats, progress, tasks, setActiveNav, isAdmin }} />}
     {activeNav === 'tasks' && <main className="workspace">
@@ -312,7 +312,7 @@ function AuthScreen({ authTab, setAuthTab, auth, setAuth, resetToken, setResetTo
 
 function Overview({ stats, progress, tasks, setActiveNav, isAdmin }) {
   const upcoming = tasks.filter(task => task.status === 'Upcoming').slice(0, 4);
-  return <main className="workspace"><section className="hero-panel"><div><span className="eyebrow">BUN VENIT ÎNAPOI</span><h2>Concentrează-te pe următorul pas.</h2><p>Obiectivele tale sunt sincronizate și pregătite pentru azi.</p><button className="btn-primary" onClick={() => setActiveNav('tasks')}>Vezi activitățile →</button></div><div className="progress-ring"><strong>{progress}%</strong><span>progres</span></div></section><div className="stats-grid"><StatCard label="Activități totale" value={stats.total} hint="în workspace" /><StatCard label="Finalizate" value={stats.completed} tone="green" hint="obiective atinse" /><StatCard label="În lucru" value={stats.active} tone="blue" hint="următorul pas" /><StatCard label="Restante" value={stats.overdue} tone="orange" hint="necesită atenție" /></div><section className="panel-card"><div className="section-heading"><div><span className="eyebrow">URMĂTORII PAȘI</span><h2>Planul tău</h2></div><button className="btn-secondary" onClick={() => setActiveNav('tasks')}>Toate activitățile</button></div>{upcoming.length ? <div className="mini-task-list">{upcoming.map(task => <div key={task.id} className="mini-task"><span className="mini-dot" /><div><b>{task.title}</b><small>{task.category} · scadent {task.dueDate}</small></div><span className="priority">{task.priority}</span></div>)}</div> : <div className="empty-state compact"><span>✓</span><h3>Ziua ta este la zi</h3><p>Nu ai activități urgente.</p></div>}</section>{isAdmin && <div className="admin-callout" onClick={() => setActiveNav('admin')}><span>⚙</span><div><b>Panou Super Administrator</b><small>Conturi, streak-uri și control platformă</small></div><strong>→</strong></div>}</main>;
+  return <main className="workspace"><section className="hero-panel hero-card"><div className="hero-copy"><span className="eyebrow">BUN VENIT ÎNAPOI</span><h2>Concentrează-te pe următorul pas.</h2><p>Obiectivele tale sunt sincronizate și pregătite pentru azi.</p><button className="btn-primary hero-action" onClick={() => setActiveNav('tasks')}>Vezi activitățile →</button></div><div className="hero-progress"><div className="progress-ring"><strong>{progress}%</strong><span>progres</span></div><div className="hero-progress-track"><span style={{ width: `${progress}%` }} /></div></div></section><div className="stats-grid"><StatCard label="Activități totale" value={stats.total} hint="în workspace" /><StatCard label="Finalizate" value={stats.completed} tone="green" hint="obiective atinse" /><StatCard label="În lucru" value={stats.active} tone="blue" hint="următorul pas" /><StatCard label="Restante" value={stats.overdue} tone="orange" hint="necesită atenție" /></div><section className="panel-card"><div className="section-heading"><div><span className="eyebrow">URMĂTORII PAȘI</span><h2>Planul tău</h2></div><button className="btn-secondary" onClick={() => setActiveNav('tasks')}>Toate activitățile</button></div>{upcoming.length ? <div className="mini-task-list">{upcoming.map(task => <div key={task.id} className="mini-task"><span className="mini-dot" /><div><b>{task.title}</b><small>{task.category} · scadent {task.dueDate}</small></div><span className="priority">{task.priority}</span></div>)}</div> : <div className="empty-state compact"><span>✓</span><h3>Ziua ta este la zi</h3><p>Nu ai activități urgente.</p></div>}</section>{isAdmin && <div className="admin-callout" onClick={() => setActiveNav('admin')}><span>⚙</span><div><b>Panou Super Administrator</b><small>Conturi, streak-uri și control platformă</small></div><strong>→</strong></div>}</main>;
 }
 
 function TaskCard({ task, onComplete, onDelete, onCancel, onFreeze, onEdit }) {

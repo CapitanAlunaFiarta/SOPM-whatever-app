@@ -34,7 +34,7 @@ export default function PwaInstallBanner() {
 
   return (
     <>
-      <div className="pwa-download-bar">
+      <div className="pwa-download-bar pwa-install-banner">
         <div className="pwa-bar-left">
           <img src={logo} alt="Whatever Icon" className="pwa-mini-logo" />
           <div>
@@ -42,7 +42,7 @@ export default function PwaInstallBanner() {
             <p>Instalează direct din browser pe ecranul telefonului cu acces GPS & Biometric</p>
           </div>
         </div>
-        <div className="pwa-bar-actions">
+        <div className="pwa-bar-actions pwa-install-actions">
           <button type="button" className="btn-pwa-install" onClick={handleInstallClick}>
             📲 Instalează pe Telefon
           </button>
