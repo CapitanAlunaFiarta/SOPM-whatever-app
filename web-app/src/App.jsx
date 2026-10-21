@@ -196,7 +196,7 @@ export default function App() {
       let biometricToken;
       if (task.requiresBiometrics) {
         if (!window.PublicKeyCredential || !navigator.credentials) throw new Error('WebAuthn nu este disponibil pe acest dispozitiv.');
-        const options = await request(`${USER_API}/users/webauthn/assertion/options`, {}, token);
+        const options = await request(`${USER_API}/users/webauthn/assertion/options`, { method: 'POST' }, token);
         const credential = await navigator.credentials.get({ publicKey: browserRequestOptions(options.publicKey) });
         const result = await request(`${USER_API}/users/webauthn/assertion/finish`, {
           method: 'POST', body: JSON.stringify({ credentialJson: credentialJson(credential), taskId: task.id })
@@ -235,7 +235,7 @@ export default function App() {
   const registerBiometric = async () => {
     try {
       if (!window.PublicKeyCredential || !navigator.credentials) throw new Error('WebAuthn nu este disponibil pe acest dispozitiv.');
-      const options = await request(`${USER_API}/users/webauthn/register/options`, {}, token);
+      const options = await request(`${USER_API}/users/webauthn/register/options`, { method: 'POST' }, token);
       const credential = await navigator.credentials.create({ publicKey: browserCreationOptions(options) });
       await request(`${USER_API}/users/webauthn/register/finish`, {
         method: 'POST', body: JSON.stringify({ credentialJson: credentialJson(credential) })
