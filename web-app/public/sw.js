@@ -1,4 +1,4 @@
-const CACHE_NAME = 'whatever-pwa-v2';
+const CACHE_NAME = 'whatever-pwa-v99';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -19,7 +19,20 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const isStylesheetOrScript = /\.(?:css|js)(?:$|\?)/i.test(new URL(event.request.url).pathname);
+  if (!isStylesheetOrScript) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) =>
+        cachedResponse || fetch(event.request).catch(() => caches.match('/index.html'))
+      )
+    );
+    return;
+  }
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    fetch(event.request).then((response) => {
+      const responseClone = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });
