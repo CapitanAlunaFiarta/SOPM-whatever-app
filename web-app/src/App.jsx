@@ -21,13 +21,8 @@ function encodeBase64Url(buffer) {
 }
 
 function validWebAuthnExtensions(options) {
-  if (!options.extensions || typeof options.extensions !== 'object') return options;
-  const extensions = { ...options.extensions };
-  delete extensions.appid;
-  return Object.keys(extensions).length ? { ...options, extensions } : (() => {
-    const { extensions: _ignored, ...withoutExtensions } = options;
-    return withoutExtensions;
-  })();
+  const { extensions: _ignored, ...withoutExtensions } = options;
+  return withoutExtensions;
 }
 
 function credentialJson(credential) {
