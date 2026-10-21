@@ -20,6 +20,24 @@ function encodeBase64Url(buffer) {
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function validWebAuthnExtensions(options) {
+  if (!options.extensions || typeof options.extensions !== 'object') return options;
+  const extensions = { ...options.extensions };
+  if (extensions.appid !== null && extensions.appid !== undefined) {
+    try {
+      if (typeof extensions.appid !== 'string' || new URL(extensions.appid).protocol !== 'https:') {
+        delete extensions.appid;
+      }
+    } catch {
+      delete extensions.appid;
+    }
+  }
+  return Object.keys(extensions).length ? { ...options, extensions } : (() => {
+    const { extensions: _ignored, ...withoutExtensions } = options;
+    return withoutExtensions;
+  })();
+}
+
 function credentialJson(credential) {
   const response = credential.response;
   return JSON.stringify({
@@ -36,7 +54,7 @@ function credentialJson(credential) {
 
 function browserCreationOptions(options) {
   return {
-    ...options, challenge: decodeBase64Url(options.challenge),
+    ...validWebAuthnExtensions(options), challenge: decodeBase64Url(options.challenge),
     user: { ...options.user, id: decodeBase64Url(options.user.id) },
     excludeCredentials: (options.excludeCredentials || []).map(item => ({ ...item, id: decodeBase64Url(item.id) }))
   };
@@ -44,7 +62,7 @@ function browserCreationOptions(options) {
 
 function browserRequestOptions(options) {
   return {
-    ...options, challenge: decodeBase64Url(options.challenge),
+    ...validWebAuthnExtensions(options), challenge: decodeBase64Url(options.challenge),
     allowCredentials: (options.allowCredentials || []).map(item => ({ ...item, id: decodeBase64Url(item.id) }))
   };
 }
