@@ -23,15 +23,7 @@ function encodeBase64Url(buffer) {
 function validWebAuthnExtensions(options) {
   if (!options.extensions || typeof options.extensions !== 'object') return options;
   const extensions = { ...options.extensions };
-  if (extensions.appid !== null && extensions.appid !== undefined) {
-    try {
-      if (typeof extensions.appid !== 'string' || new URL(extensions.appid).protocol !== 'https:') {
-        delete extensions.appid;
-      }
-    } catch {
-      delete extensions.appid;
-    }
-  }
+  delete extensions.appid;
   return Object.keys(extensions).length ? { ...options, extensions } : (() => {
     const { extensions: _ignored, ...withoutExtensions } = options;
     return withoutExtensions;
