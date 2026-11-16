@@ -4,24 +4,29 @@
     "slug": "whatever-app",
     "version": "2.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#070b14"
-    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.unitbv.whatever",
-      "icon": "./assets/logo.png"
+      "bundleIdentifier": "com.unitbv.whatever"
     },
     "android": {
       "package": "com.unitbv.whatever",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#070b14"
-      }
-    }
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permite aplicației Whatever să folosească Face ID pentru autentificare."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permite aplicației Whatever să verifice locația pentru task-uri."
+        }
+      ]
+    ]
   }
 }
