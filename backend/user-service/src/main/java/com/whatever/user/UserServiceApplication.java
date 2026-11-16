@@ -181,8 +181,12 @@ public class UserServiceApplication {
     @GetMapping("/friends")
     public List<Map<String, Object>> friends(@RequestHeader("Authorization") String authorization) {
         Token token = requireToken(authorization);
-        return db.queryForList("SELECT u.username,u.full_name AS \"fullName\",u.email FROM friends f "
-                + "JOIN users u ON u.email=f.friend_email WHERE f.user_email=?", token.email());
+        return db.queryForList("SELECT u.username,u.full_name AS \"fullName\",u.email,'outgoing' AS direction "
+                + "FROM friends f JOIN users u ON u.email=f.friend_email WHERE f.user_email=? "
+                + "UNION ALL "
+                + "SELECT u.username,u.full_name AS \"fullName\",u.email,'incoming' AS direction "
+                + "FROM friends f JOIN users u ON u.email=f.user_email WHERE f.friend_email=? "
+                + "ORDER BY direction,username", token.email(), token.email());
     }
 
     @GetMapping("/admin/users")

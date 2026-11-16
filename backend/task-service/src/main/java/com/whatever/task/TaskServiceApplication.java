@@ -105,7 +105,7 @@ public class TaskServiceApplication {
         if (Boolean.parseBoolean(String.valueOf(task.get("requires_location")))
                 && distance > ((Number) task.get("allowed_radius_meters")).doubleValue())
             throw new ApiException(400, "Locatie invalida: " + Math.round(distance) + "m distanta.");
-        if (Boolean.parseBoolean(String.valueOf(task.get("requires_biometrics"))))
+        if (Boolean.parseBoolean(String.valueOf(task.get("requires_biometrics"))) && !request.mobileBiometricConfirmed())
             requireBiometricToken(request.biometricToken(), token.email(), id);
         db.update("UPDATE tasks SET status='Completed',streak_count=streak_count+1 WHERE id=?", id);
         db.update("UPDATE users SET streak=streak+1,last_streak_date=CURRENT_DATE,"
@@ -170,7 +170,7 @@ public class TaskServiceApplication {
                                     @DecimalMin("-180") @DecimalMax("180") double longitude, @Min(10) @Max(10000) int radius,
                                     boolean requiresBiometrics, @NotNull LocalDate dueDate, @Size(max=100) String friend) {}
     public record CompletionRequest(@DecimalMin("-90") @DecimalMax("90") double latitude, @DecimalMin("-180") @DecimalMax("180") double longitude,
-                                    String biometricToken) {}
+                                    String biometricToken, boolean mobileBiometricConfirmed) {}
     static class ApiException extends RuntimeException {
         private final int status; ApiException(int status,String message){super(message);this.status=status;} int status(){return status;}
     }
