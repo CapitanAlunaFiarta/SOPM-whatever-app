@@ -4,6 +4,7 @@ import { useWindowDimensions, type ColorValue } from 'react-native';
 
 import { colors } from '@/components/theme';
 import type { IconName } from '@/components/ui';
+import { useI18n } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 
 function icon(name: IconName) {
@@ -15,6 +16,7 @@ function icon(name: IconName) {
 /** Tab-uri jos pe telefon, bară laterală pe ecrane late (web pe desktop, tabletă). */
 export default function TabsLayout() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
 
@@ -31,13 +33,13 @@ export default function TabsLayout() {
       tabBarLabelStyle: { fontWeight: '700' },
       sceneStyle: { backgroundColor: colors.background },
     }}>
-      <Tabs.Screen name="index" options={{ title: 'Acasă', tabBarIcon: icon('home-outline') }} />
-      <Tabs.Screen name="tasks" options={{ title: 'Activități', tabBarIcon: icon('checkmark-done-outline') }} />
-      <Tabs.Screen name="map" options={{ title: 'Hartă', tabBarIcon: icon('map-outline') }} />
-      <Tabs.Screen name="social" options={{ title: 'Social', tabBarIcon: icon('people-outline') }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarIcon: icon('person-circle-outline') }} />
+      <Tabs.Screen name="index" options={{ title: t('tabs.home'), tabBarIcon: icon('home-outline') }} />
+      <Tabs.Screen name="tasks" options={{ title: t('tabs.tasks'), tabBarIcon: icon('checkmark-done-outline') }} />
+      <Tabs.Screen name="map" options={{ title: t('tabs.map'), tabBarIcon: icon('map-outline') }} />
+      <Tabs.Screen name="social" options={{ title: t('tabs.social'), tabBarIcon: icon('people-outline') }} />
+      <Tabs.Screen name="profile" options={{ title: t('tabs.profile'), tabBarIcon: icon('person-circle-outline') }} />
       <Tabs.Screen name="admin" options={{
-        title: 'Admin',
+        title: t('tabs.admin'),
         tabBarIcon: icon('shield-checkmark-outline'),
         href: user?.role === 'ADMIN' ? undefined : null,
       }} />

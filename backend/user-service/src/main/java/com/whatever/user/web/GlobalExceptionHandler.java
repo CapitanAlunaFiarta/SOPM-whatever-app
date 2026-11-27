@@ -16,7 +16,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 
-/** Toate erorile ajung la client ca {"error": "..."} cu un mesaj în română. */
+/** Toate erorile ajung la client ca {"error": "..."}, traduse în limba cererii (vezi I18n). */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
@@ -68,6 +68,6 @@ public class GlobalExceptionHandler {
     }
 
     private static ResponseEntity<Map<String, String>> body(int status, String message) {
-        return ResponseEntity.status(status).body(Map.of("error", message));
+        return ResponseEntity.status(status).body(Map.of("error", I18n.translate(message, I18n.current())));
     }
 }

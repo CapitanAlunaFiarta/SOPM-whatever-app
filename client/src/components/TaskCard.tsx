@@ -2,22 +2,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
-import { friendlyDate, pluralDays, pluralPoints } from '@/lib/dates';
 import { confirmAction, showMessage } from '@/lib/dialogs';
 import { useCompleteTask, useTaskAction } from '@/lib/queries';
-import { PRIORITY_LABELS, STATUS_LABELS, type Task } from '@/lib/types';
+import type { Task } from '@/lib/types';
 
+import { CATEGORY_ICONS } from './categories';
 import { colors, radius, type Tone } from './theme';
-import { Badge, Button, type IconName } from './ui';
-
-const CATEGORY_ICONS: Record<string, IconName> = {
-  Personal: 'person-outline',
-  Facultate: 'school-outline',
-  Sport: 'barbell-outline',
-  'Proiect Echipă': 'people-outline',
-  Sănătate: 'heart-outline',
-};
+import { Badge, Button } from './ui';
 
 const STATUS_TONES: Record<Task['status'], Tone> = {
   Upcoming: 'info',
@@ -27,6 +20,7 @@ const STATUS_TONES: Record<Task['status'], Tone> = {
 };
 
 export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
+  const { t, tp, formatDate } = useI18n();
   const complete = useCompleteTask();
   const action = useTaskAction();
   const active = task.status === 'Upcoming' || task.status === 'Overdue';
@@ -35,24 +29,26 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
   const onComplete = async () => {
     try {
       const result = await complete.mutateAsync(task);
-      showMessage('Gata!', `Streak: ${pluralDays(result.streak)} · ${pluralPoints(result.points)}`);
+      showMessage(t('card.done'), t('card.result', {
+        streak: tp('plural.days', result.streak), points: tp('plural.points', result.points),
+      }));
     } catch (error) {
-      showMessage('Nu s-a putut confirma', errorMessage(error));
+      showMessage(t('card.confirmFailed'), errorMessage(error));
     }
   };
 
   const run = async (kind: 'cancel' | 'freeze' | 'delete') => {
     const questions = {
-      cancel: ['Anulezi activitatea?', 'Nu o vei mai putea finaliza.', 'Anulează'],
-      freeze: ['Folosești un freeze?', 'Activitatea se mută pe azi și streak-ul tău e protejat pentru o zi ratată.', 'Folosește'],
-      delete: ['Ștergi activitatea?', 'Ștergerea este definitivă.', 'Șterge'],
+      cancel: [t('card.cancelTitle'), t('card.cancelText'), t('card.cancelConfirm')],
+      freeze: [t('card.freezeTitle'), t('card.freezeText'), t('card.freezeConfirm')],
+      delete: [t('card.deleteTitle'), t('card.deleteText'), t('common.delete')],
     } as const;
     const [title, message, label] = questions[kind];
     if (!(await confirmAction(title, message, label))) return;
     try {
       await action.mutateAsync({ task, action: kind });
     } catch (error) {
-      showMessage('Acțiunea nu a reușit', errorMessage(error));
+      showMessage(t('card.actionFailed'), errorMessage(error));
     }
   };
 
@@ -65,38 +61,38 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[styles.title, task.status === 'Completed' && styles.done]} numberOfLines={2}>{task.title}</Text>
           <Text style={styles.meta}>
-            {task.category} · {friendlyDate(task.dueDate)} · {PRIORITY_LABELS[task.priority]}
+            {t(`categoryShort.${task.category}`)} · {formatDate(task.dueDate)} · {t(`priority.${task.priority}`)}
           </Text>
         </View>
-        <Badge text={task.completedToday ? 'Făcută azi' : STATUS_LABELS[task.status]}
+        <Badge text={task.completedToday ? t('card.doneToday') : t(`status.${task.status}`)}
           tone={task.completedToday ? 'success' : STATUS_TONES[task.status]} />
       </View>
 
       {!compact && (
         <View style={styles.tags}>
-          {task.isRecurring && <Badge text={`Zilnic · ${task.streakCount}×`} icon="repeat" tone="accent" />}
-          {task.requiresLocation && <Badge text={`GPS · ${task.radius} m`} icon="location-outline" tone="info" />}
-          {task.requiresBiometrics && <Badge text="Biometrie" icon="finger-print" tone="accent" />}
-          {!task.isOwner && <Badge text={`De la @${task.ownerUsername}`} icon="people-outline" />}
-          {task.isOwner && task.friend ? <Badge text={`Cu @${task.friend}`} icon="people-outline" /> : null}
+          {task.isRecurring && <Badge text={t('card.daily', { count: task.streakCount })} icon="repeat" tone="accent" />}
+          {task.requiresLocation && <Badge text={t('card.gps', { radius: task.radius })} icon="location-outline" tone="info" />}
+          {task.requiresBiometrics && <Badge text={t('bio.generic')} icon="finger-print" tone="accent" />}
+          {!task.isOwner && <Badge text={t('card.from', { username: task.ownerUsername })} icon="people-outline" />}
+          {task.isOwner && task.friend ? <Badge text={t('card.with', { username: task.friend })} icon="people-outline" /> : null}
         </View>
       )}
 
       {task.isOwner && (canComplete || !compact) && (
         <View style={styles.actions}>
           {canComplete && (
-            <Button compact title="Confirmă" icon="checkmark-circle" loading={complete.isPending} onPress={onComplete} />
+            <Button compact title={t('card.confirm')} icon="checkmark-circle" loading={complete.isPending} onPress={onComplete} />
           )}
           {task.status === 'Overdue' && !compact && (
-            <Button compact variant="secondary" title="Freeze" icon="snow-outline" loading={action.isPending} onPress={() => run('freeze')} />
+            <Button compact variant="secondary" title={t('card.freeze')} icon="snow-outline" loading={action.isPending} onPress={() => run('freeze')} />
           )}
           {active && !compact && (
-            <Button compact variant="secondary" title="Editează" icon="create-outline" onPress={() => router.push(`/task/${task.id}`)} />
+            <Button compact variant="secondary" title={t('card.edit')} icon="create-outline" onPress={() => router.push(`/task/${task.id}`)} />
           )}
           {active && !compact && (
-            <Button compact variant="ghost" title="Anulează" onPress={() => run('cancel')} />
+            <Button compact variant="ghost" title={t('card.cancel')} onPress={() => run('cancel')} />
           )}
-          {!compact && <Button compact variant="ghost" title="Șterge" icon="trash-outline" onPress={() => run('delete')} />}
+          {!compact && <Button compact variant="ghost" title={t('common.delete')} icon="trash-outline" onPress={() => run('delete')} />}
         </View>
       )}
     </View>

@@ -4,10 +4,19 @@ import com.whatever.task.web.ApiException;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /** Reguli pure (fără bază de date): valori permise, distanță, streak zilnic, freeze-uri lunare. */
 public final class TaskRules {
-    public static final List<String> CATEGORIES = List.of("Personal", "Facultate", "Sport", "Proiect Echipă", "Sănătate");
+    /** Chei stabile; aplicația le afișează tradus. */
+    public static final List<String> CATEGORIES = List.of("SPORT", "STUDY", "CHORES", "ENTERTAINMENT");
+    public static final String DEFAULT_CATEGORY = "CHORES";
+    /** Categoriile vechi (aplicații neactualizate, date dinainte de migrarea 003). */
+    private static final Map<String, String> LEGACY_CATEGORIES = Map.of(
+            "sport", "SPORT", "sănătate", "SPORT", "sanatate", "SPORT",
+            "facultate", "STUDY", "proiect echipă", "STUDY", "proiect echipa", "STUDY",
+            "personal", "CHORES", "general", "CHORES");
     public static final List<String> PRIORITIES = List.of("Low", "Medium", "High");
     public static final int MONTHLY_FREEZES = 3;
     /** Toleranța maximă acceptată pentru precizia GPS raportată de telefon. */
@@ -16,11 +25,29 @@ public final class TaskRules {
     private TaskRules() {
     }
 
+    /** Categoria trimisă de client: cheie nouă, nume vechi sau gol (→ CHORES). Altceva → 400. */
     public static String category(String value) {
         String category = value == null ? "" : value.trim();
-        if ("General".equalsIgnoreCase(category) || category.isEmpty()) return "Personal";
-        return CATEGORIES.stream().filter(item -> item.equalsIgnoreCase(category)).findFirst()
-                .orElseThrow(() -> new ApiException(400, "Categorie invalidă. Alege: " + String.join(", ", CATEGORIES) + "."));
+        if (category.isEmpty()) return DEFAULT_CATEGORY;
+        String known = normalizeCategory(category);
+        if (known == null) throw new ApiException(400, "Categorie invalidă.");
+        return known;
+    }
+
+    /** Cheia categoriei pentru o valoare din baza de date; necunoscut → null. */
+    public static String normalizeCategory(Object value) {
+        if (value == null) return null;
+        String category = value.toString().trim();
+        for (String key : CATEGORIES) {
+            if (key.equalsIgnoreCase(category)) return key;
+        }
+        return LEGACY_CATEGORIES.get(category.toLowerCase(Locale.ROOT));
+    }
+
+    /** Ca normalizeCategory, dar valorile necunoscute devin CHORES (pentru afișare). */
+    public static String storedCategory(Object value) {
+        String key = normalizeCategory(value);
+        return key == null ? DEFAULT_CATEGORY : key;
     }
 
     public static String priority(String value) {

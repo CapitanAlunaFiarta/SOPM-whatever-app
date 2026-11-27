@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { localDate } from '@/lib/dates';
 import { currentPosition } from '@/lib/location';
 import { useFriends, useSaveTask } from '@/lib/queries';
-import { CATEGORIES, DEFAULT_COORDS, PRIORITIES, PRIORITY_LABELS, type Task, type TaskInput } from '@/lib/types';
+import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_COORDS, PRIORITIES, type Task, type TaskInput } from '@/lib/types';
 
 import { DateField } from './DateField';
 import { LocationPicker } from './LocationPicker';
@@ -24,13 +25,14 @@ function initialInput(task?: Task): TaskInput {
     };
   }
   return {
-    title: '', category: 'Personal', priority: 'Medium', dueDate: localDate(), isRecurring: false,
+    title: '', category: DEFAULT_CATEGORY, priority: 'Medium', dueDate: localDate(), isRecurring: false,
     requiresLocation: false, ...DEFAULT_COORDS, radius: 150, requiresBiometrics: false, friend: '',
   };
 }
 
 /** Formular comun pentru crearea și editarea unei activități (telefon și web). */
 export function TaskForm({ task }: { task?: Task }) {
+  const { t } = useI18n();
   const [input, setInput] = useState<TaskInput>(() => initialInput(task));
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
@@ -53,7 +55,7 @@ export function TaskForm({ task }: { task?: Task }) {
   const submit = async () => {
     setError(null);
     if (!input.title.trim()) {
-      setError('Scrie un titlu pentru activitate.');
+      setError(t('form.titleRequired'));
       return;
     }
     try {
@@ -73,23 +75,23 @@ export function TaskForm({ task }: { task?: Task }) {
     <View style={{ gap: 14 }}>
       {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
       <Card>
-        <TextField label="Ce vrei să faci?" value={input.title} onChangeText={(value) => set('title', value)}
-          placeholder="Ex: Alerg 20 de minute" maxLength={255} autoFocus={!task} />
-        <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>Categorie</Text>
-        <ChipGroup options={CATEGORIES} value={input.category} onChange={(value) => set('category', value)} />
-        <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>Prioritate</Text>
-        <ChipGroup options={PRIORITIES} value={input.priority} onChange={(value) => set('priority', value)} labels={PRIORITY_LABELS} />
-        <DateField label="Scadență" value={input.dueDate} onChange={(value) => set('dueDate', value)} />
+        <TextField label={t('form.title')} value={input.title} onChangeText={(value) => set('title', value)}
+          placeholder={t('form.titlePlaceholder')} maxLength={255} autoFocus={!task} />
+        <Text style={styles.label}>{t('form.category')}</Text>
+        <ChipGroup options={CATEGORIES} value={input.category} onChange={(value) => set('category', value)}
+          labels={Object.fromEntries(CATEGORIES.map((key) => [key, t(`category.${key}`)]))} />
+        <Text style={styles.label}>{t('form.priority')}</Text>
+        <ChipGroup options={PRIORITIES} value={input.priority} onChange={(value) => set('priority', value)}
+          labels={Object.fromEntries(PRIORITIES.map((key) => [key, t(`priority.${key}`)]))} />
+        <DateField label={t('form.dueDate')} value={input.dueDate} onChange={(value) => set('dueDate', value)} />
       </Card>
 
       <Card>
-        <ToggleRow icon="repeat" label="Zilnic" description="Rămâne activă și o poți confirma o dată pe zi."
+        <ToggleRow icon="repeat" label={t('form.daily')} description={t('form.dailyHint')}
           value={input.isRecurring} onChange={(value) => set('isRecurring', value)} />
-        <ToggleRow icon="finger-print" label="Confirmare cu biometrie"
-          description="Pe telefon: amprentă/Face ID. Pe web: passkey."
+        <ToggleRow icon="finger-print" label={t('form.biometricsToggle')} description={t('form.biometricsHint')}
           value={input.requiresBiometrics} onChange={(value) => set('requiresBiometrics', value)} />
-        <ToggleRow icon="location-outline" label="Confirmare în locație"
-          description="Poți confirma doar când ești în raza aleasă."
+        <ToggleRow icon="location-outline" label={t('form.locationToggle')} description={t('form.locationHint')}
           value={input.requiresLocation} onChange={(value) => {
             set('requiresLocation', value);
             // Pinul pornește de la locația curentă, dacă nu a fost deja ales.
@@ -105,9 +107,9 @@ export function TaskForm({ task }: { task?: Task }) {
               <Text style={{ color: colors.muted, fontSize: 12.5 }}>
                 {input.latitude.toFixed(5)}, {input.longitude.toFixed(5)}
               </Text>
-              <Button compact variant="secondary" title="Locația mea" icon="locate" loading={locating} onPress={locateMe} />
+              <Button compact variant="secondary" title={t('form.myLocation')} icon="locate" loading={locating} onPress={locateMe} />
             </Row>
-            <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>Raza (metri)</Text>
+            <Text style={styles.label}>{t('form.radius')}</Text>
             <ChipGroup options={radiusOptions} value={String(input.radius)} onChange={(value) => set('radius', Number(value))} />
           </View>
         )}
@@ -115,13 +117,17 @@ export function TaskForm({ task }: { task?: Task }) {
 
       {friendOptions.length > 1 && (
         <Card>
-          <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>Partajează cu un prieten (opțional)</Text>
+          <Text style={styles.label}>{t('form.shareWith')}</Text>
           <ChipGroup options={friendOptions} value={input.friend} onChange={(value) => set('friend', value)}
-            labels={Object.fromEntries(friendOptions.map((name) => [name, name ? `@${name}` : 'Nimeni']))} />
+            labels={Object.fromEntries(friendOptions.map((name) => [name, name ? `@${name}` : t('form.nobody')]))} />
         </Card>
       )}
 
-      <Button title={task ? 'Salvează modificările' : 'Adaugă activitatea'} icon="checkmark" loading={save.isPending} onPress={submit} />
+      <Button title={task ? t('form.saveChanges') : t('form.add')} icon="checkmark" loading={save.isPending} onPress={submit} />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  label: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+});

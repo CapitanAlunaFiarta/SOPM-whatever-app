@@ -1,6 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { translate } from '../i18n/core';
+
 import { ApiError, endSession, hasStoredSession, onSessionExpired, refreshSession, request, saveSession } from './api';
 import type { Session, User } from './types';
 
@@ -48,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         if (cancelled) return;
-        setMessage(error instanceof Error ? error.message : 'Serverul nu răspunde.');
+        setMessage(error instanceof Error ? error.message : translate('error.serverUnavailable'));
         setStatus('offline');
       }
     })();
@@ -61,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSessionExpired(() => {
       queryClient.clear();
       setUser(null);
-      setMessage('Sesiunea a expirat. Autentifică-te din nou.');
+      setMessage(translate('auth.sessionExpired'));
       setStatus('signedOut');
     });
     return () => onSessionExpired(null);
@@ -108,13 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth trebuie folosit în AuthProvider.');
+  if (!context) throw new Error('useAuth must be used inside AuthProvider.');
   return context;
 }
 
 /** Utilizatorul autentificat (doar în ecranele protejate). */
 export function useCurrentUser(): User {
   const { user } = useAuth();
-  if (!user) throw new ApiError(401, 'Autentificare necesară.');
+  if (!user) throw new ApiError(401, translate('auth.required'));
   return user;
 }

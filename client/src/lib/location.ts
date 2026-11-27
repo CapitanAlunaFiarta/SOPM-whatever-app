@@ -1,5 +1,7 @@
 import * as Location from 'expo-location';
 
+import { translate } from '../i18n/core';
+
 import type { Position } from './geo';
 
 export { distanceMeters, type Position } from './geo';
@@ -8,7 +10,7 @@ export { distanceMeters, type Position } from './geo';
 export async function currentPosition(): Promise<Position> {
   const permission = await Location.requestForegroundPermissionsAsync();
   if (permission.status !== 'granted') {
-    throw new Error('Permite accesul la locație ca să poți confirma activitățile legate de un loc.');
+    throw new Error(translate('location.permission'));
   }
   try {
     const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -19,6 +21,6 @@ export async function currentPosition(): Promise<Position> {
       mocked: position.mocked ?? undefined,
     };
   } catch {
-    throw new Error('Locația nu a putut fi citită. Activează GPS-ul și încearcă din nou.');
+    throw new Error(translate('location.unavailable'));
   }
 }

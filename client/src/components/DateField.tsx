@@ -1,12 +1,14 @@
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { friendlyDate, localDate, parseLocalDate } from '@/lib/dates';
+import { useI18n } from '@/i18n';
+import { localDate, parseLocalDate } from '@/lib/dates';
 
 import { colors, radius } from './theme';
 
 /** Selector de dată nativ (iOS: compact; Android: dialog). Pe web: DateField.web.tsx. */
 export function DateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const { formatDate, locale } = useI18n();
   const date = parseLocalDate(value);
   const update = (selected?: Date) => {
     if (selected) onChange(localDate(0, selected));
@@ -17,15 +19,15 @@ export function DateField({ label, value, onChange }: { label: string; value: st
       <Text style={styles.label}>{label}</Text>
       {Platform.OS === 'ios' ? (
         <View style={styles.iosRow}>
-          <DateTimePicker value={date} mode="date" display="compact" themeVariant="dark"
+          <DateTimePicker value={date} mode="date" display="compact" themeVariant="dark" locale={locale}
             onChange={(_event, selected) => update(selected)} />
-          <Text style={styles.hint}>{friendlyDate(value)}</Text>
+          <Text style={styles.hint}>{formatDate(value)}</Text>
         </View>
       ) : (
         <Pressable style={styles.input} accessibilityRole="button"
           onPress={() => DateTimePickerAndroid.open({ value: date, mode: 'date', onChange: (_event, selected) => update(selected) })}>
           <Text style={styles.value}>{value}</Text>
-          <Text style={styles.hint}>{friendlyDate(value)}</Text>
+          <Text style={styles.hint}>{formatDate(value)}</Text>
         </Pressable>
       )}
     </View>

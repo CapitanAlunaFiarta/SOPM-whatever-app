@@ -20,9 +20,11 @@ export type Session = {
   user: User;
 };
 
-export const CATEGORIES = ['Personal', 'Facultate', 'Sport', 'Proiect Echipă', 'Sănătate'] as const;
+/** Cheile categoriilor (aceleași pe server); etichetele vin din i18n: category.SPORT etc. */
+export const CATEGORIES = ['SPORT', 'STUDY', 'CHORES', 'ENTERTAINMENT'] as const;
 export const PRIORITIES = ['Low', 'Medium', 'High'] as const;
 export type Category = (typeof CATEGORIES)[number];
+export const DEFAULT_CATEGORY: Category = 'CHORES';
 export type Priority = (typeof PRIORITIES)[number];
 export type TaskStatus = 'Upcoming' | 'Overdue' | 'Completed' | 'Canceled';
 
@@ -95,20 +97,15 @@ export type LeaderboardEntry = {
 
 export type AdminUser = User & { createdAt: string };
 
+/** Recap lunar: activități finalizate pe categorii (GET /api/tasks/recap?month=YYYY-MM). */
+export type Recap = {
+  month: string;
+  total: number;
+  previousTotal: number;
+  categories: { category: Category; count: number }[];
+};
+
 export type Coordinates = { latitude: number; longitude: number };
-
-export const STATUS_LABELS: Record<TaskStatus, string> = {
-  Upcoming: 'Activă',
-  Overdue: 'Restantă',
-  Completed: 'Finalizată',
-  Canceled: 'Anulată',
-};
-
-export const PRIORITY_LABELS: Record<Priority, string> = {
-  Low: 'Scăzută',
-  Medium: 'Medie',
-  High: 'Ridicată',
-};
 
 /** Centrul Brașovului, folosit când nu avem încă locația utilizatorului. */
 export const DEFAULT_COORDS: Coordinates = { latitude: 45.6525, longitude: 25.5888 };

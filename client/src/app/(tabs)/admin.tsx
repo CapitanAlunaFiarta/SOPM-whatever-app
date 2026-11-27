@@ -3,6 +3,7 @@ import { Modal, StyleSheet, View } from 'react-native';
 
 import { colors } from '@/components/theme';
 import { AppText, Badge, Banner, Button, Card, EmptyState, Row, Screen, TextField } from '@/components/ui';
+import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { confirmAction } from '@/lib/dialogs';
@@ -10,6 +11,7 @@ import { useAdminAction, useAdminUsers } from '@/lib/queries';
 import type { AdminUser } from '@/lib/types';
 
 export default function AdminScreen() {
+  const { t, tp } = useI18n();
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const users = useAdminUsers(isAdmin);
@@ -22,11 +24,12 @@ export default function AdminScreen() {
     `${item.fullName} ${item.username} ${item.email}`.toLowerCase().includes(query.trim().toLowerCase())), [users.data, query]);
 
   if (!isAdmin) {
-    return <Screen title="Admin"><Card><EmptyState icon="lock-closed-outline" title="Acces interzis" /></Card></Screen>;
+    return <Screen title={t('tabs.admin')}><Card><EmptyState icon="lock-closed-outline" title={t('admin.forbidden')} /></Card></Screen>;
   }
 
   const run = async (target: AdminUser, kind: 'bonus-streak' | 'reset-freezes' | 'delete') => {
-    if (kind === 'delete' && !(await confirmAction('Ștergi contul?', `${target.fullName} (@${target.username}) și toate activitățile lui.`, 'Șterge'))) return;
+    if (kind === 'delete' && !(await confirmAction(t('admin.deleteTitle'),
+      t('admin.deleteText', { name: target.fullName, username: target.username }), t('common.delete')))) return;
     setError(null);
     try {
       await action.mutateAsync({ email: target.email, action: kind });
@@ -36,10 +39,10 @@ export default function AdminScreen() {
   };
 
   return (
-    <Screen title="Administrare" subtitle={`${users.data?.length ?? 0} conturi`} refreshing={users.isRefetching}
+    <Screen title={t('admin.title')} subtitle={tp('plural.accounts', users.data?.length ?? 0)} refreshing={users.isRefetching}
       onRefresh={() => users.refetch()}>
       {error || users.error ? <Banner text={error ?? errorMessage(users.error)} onClose={() => setError(null)} /> : null}
-      <TextField value={query} onChangeText={setQuery} placeholder="Caută după nume, username sau email…" autoCapitalize="none" />
+      <TextField value={query} onChangeText={setQuery} placeholder={t('admin.search')} autoCapitalize="none" />
       {visible.map((item) => (
         <Card key={item.id}>
           <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -47,16 +50,21 @@ export default function AdminScreen() {
               <AppText variant="heading">{item.fullName}</AppText>
               <AppText variant="muted">@{item.username} · {item.email}</AppText>
             </View>
-            <Badge text={item.role} tone={item.role === 'ADMIN' ? 'accent' : 'neutral'} />
+            <Badge text={item.role === 'ADMIN' ? t('role.admin') : t('role.user')} tone={item.role === 'ADMIN' ? 'accent' : 'neutral'} />
           </Row>
-          <AppText variant="small">🔥 {item.streak} · ⭐ {item.points} · ❄ {item.freezesLeft}/3 · biometrie {item.biometricEnabled ? 'da' : 'nu'}</AppText>
+          <AppText variant="small">
+            {t('admin.stats', {
+              streak: item.streak, points: item.points, freezes: item.freezesLeft,
+              biometrics: item.biometricEnabled ? t('common.yesLower') : t('common.noLower'),
+            })}
+          </AppText>
           <Row style={{ flexWrap: 'wrap' }} gap={8}>
-            <Button compact variant="secondary" title="+5 streak" onPress={() => run(item, 'bonus-streak')} />
-            <Button compact variant="secondary" title="Reset freeze" onPress={() => run(item, 'reset-freezes')} />
+            <Button compact variant="secondary" title={t('admin.bonusStreak')} onPress={() => run(item, 'bonus-streak')} />
+            <Button compact variant="secondary" title={t('admin.resetFreezes')} onPress={() => run(item, 'reset-freezes')} />
             {item.email !== user?.email && (
               <>
-                <Button compact variant="secondary" title="Parolă nouă" icon="key-outline" onPress={() => setPasswordFor(item)} />
-                <Button compact variant="ghost" title="Șterge contul" icon="trash-outline" onPress={() => run(item, 'delete')} />
+                <Button compact variant="secondary" title={t('admin.newPassword')} icon="key-outline" onPress={() => setPasswordFor(item)} />
+                <Button compact variant="ghost" title={t('admin.deleteAccount')} icon="trash-outline" onPress={() => run(item, 'delete')} />
               </>
             )}
           </Row>
@@ -68,6 +76,7 @@ export default function AdminScreen() {
 }
 
 function PasswordModal({ target, onClose }: { target: AdminUser | null; onClose: () => void }) {
+  const { t } = useI18n();
   const action = useAdminAction();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +84,7 @@ function PasswordModal({ target, onClose }: { target: AdminUser | null; onClose:
   const submit = async () => {
     if (!target) return;
     if (password.length < 12) {
-      setError('Parola trebuie să aibă cel puțin 12 caractere.');
+      setError(t('password.tooShort'));
       return;
     }
     try {
@@ -92,13 +101,13 @@ function PasswordModal({ target, onClose }: { target: AdminUser | null; onClose:
     <Modal visible={Boolean(target)} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <Card style={styles.dialog}>
-          <AppText variant="heading">Parolă nouă pentru @{target?.username}</AppText>
-          <AppText variant="small">Sesiunile existente ale utilizatorului vor fi închise.</AppText>
+          <AppText variant="heading">{t('admin.passwordFor', { username: target?.username ?? '' })}</AppText>
+          <AppText variant="small">{t('admin.passwordNote')}</AppText>
           {error ? <Banner text={error} /> : null}
-          <TextField value={password} onChangeText={setPassword} secureTextEntry placeholder="Minim 12 caractere" autoFocus />
+          <TextField value={password} onChangeText={setPassword} secureTextEntry placeholder={t('password.minPlaceholder')} autoFocus />
           <Row style={{ justifyContent: 'flex-end' }}>
-            <Button compact variant="ghost" title="Renunță" onPress={() => { setPassword(''); setError(null); onClose(); }} />
-            <Button compact title="Salvează" loading={action.isPending} onPress={submit} />
+            <Button compact variant="ghost" title={t('common.cancel')} onPress={() => { setPassword(''); setError(null); onClose(); }} />
+            <Button compact title={t('common.save')} loading={action.isPending} onPress={submit} />
           </Row>
         </Card>
       </View>

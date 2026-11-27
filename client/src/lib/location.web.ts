@@ -1,3 +1,5 @@
+import { translate } from '../i18n/core';
+
 import type { Position } from './geo';
 
 export { distanceMeters, type Position } from './geo';
@@ -9,7 +11,7 @@ export { distanceMeters, type Position } from './geo';
 export function currentPosition(): Promise<Position> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      reject(new Error('Browserul nu poate citi locația.'));
+      reject(new Error(translate('location.browserUnsupported')));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -19,8 +21,8 @@ export function currentPosition(): Promise<Position> {
         accuracy: position.coords.accuracy ?? undefined,
       }),
       (error) => reject(new Error(error.code === error.PERMISSION_DENIED
-        ? 'Permite accesul la locație (din setările browserului) ca să poți confirma activitățile legate de un loc.'
-        : 'Locația nu a putut fi citită. Încearcă din nou.')),
+        ? translate('location.browserPermission')
+        : translate('location.browserUnavailable'))),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 },
     );
   });

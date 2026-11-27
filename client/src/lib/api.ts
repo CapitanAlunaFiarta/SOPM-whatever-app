@@ -1,3 +1,5 @@
+import { currentLanguage, translate } from '../i18n/core';
+
 import { API_URLS, REQUEST_TIMEOUT_MS, type ApiService } from './config';
 import * as storage from './storage';
 import type { Session } from './types';
@@ -73,13 +75,15 @@ async function send(service: ApiService, path: string, options: RequestOptions, 
       method: options.method ?? 'GET',
       headers: {
         'Content-Type': 'application/json',
+        // Serverul traduce mesajele de eroare (și emailul de resetare) în limba aleasă.
+        'Accept-Language': currentLanguage(),
         ...(withAuth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: controller.signal,
     });
   } catch {
-    throw new ApiError(0, 'Serverul nu răspunde. Dacă a stat nefolosit, pornește în aproximativ 30 de secunde — încearcă din nou.');
+    throw new ApiError(0, translate('error.network'));
   } finally {
     clearTimeout(timer);
   }
@@ -110,7 +114,7 @@ export function refreshSession(): Promise<Session | null> {
         await forgetSession();
         return null;
       }
-      if (!response.ok) throw new ApiError(response.status, data?.error ?? 'Serverul nu răspunde momentan.');
+      if (!response.ok) throw new ApiError(response.status, data?.error ?? translate('error.serverUnavailable'));
       await saveSession(data as Session);
       return data as Session;
     })().finally(() => {
@@ -134,12 +138,12 @@ export async function request<T>(service: ApiService, path: string, options: Req
     sessionExpiredHandler?.();
   }
   if (!response.ok) {
-    throw new ApiError(response.status, data?.error ?? `Eroare de server (${response.status}).`);
+    throw new ApiError(response.status, data?.error ?? translate('error.server', { status: response.status }));
   }
   return data as T;
 }
 
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
-  return 'A apărut o eroare neașteptată.';
+  return translate('error.unexpected');
 }

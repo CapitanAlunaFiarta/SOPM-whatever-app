@@ -2,7 +2,8 @@ import { Fragment } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { Callout, Circle, Marker } from 'react-native-maps';
 
-import { STATUS_LABELS, type Coordinates, type Task } from '@/lib/types';
+import { useI18n } from '@/i18n';
+import type { Coordinates, Task } from '@/lib/types';
 
 import { colors } from './theme';
 import { AppText } from './ui';
@@ -13,6 +14,7 @@ export function TasksMap({ tasks, center, onSelect }: {
   center: Coordinates;
   onSelect?: (task: Task) => void;
 }) {
+  const { t } = useI18n();
   return (
     <View style={styles.wrapper}>
       <MapView style={StyleSheet.absoluteFill} initialRegion={{ ...center, latitudeDelta: 0.06, longitudeDelta: 0.06 }}
@@ -25,7 +27,9 @@ export function TasksMap({ tasks, center, onSelect }: {
               <Callout>
                 <View style={{ maxWidth: 220 }}>
                   <AppText style={{ color: '#111', fontWeight: '700' }}>{task.title}</AppText>
-                  <AppText style={{ color: '#444' }} variant="small">{STATUS_LABELS[task.status]} · raza {task.radius} m</AppText>
+                  <AppText style={{ color: '#444' }} variant="small">
+                    {t('map.taskLabel', { status: t(`status.${task.status}`), radius: task.radius })}
+                  </AppText>
                 </View>
               </Callout>
             </Marker>

@@ -5,9 +5,9 @@ import { colors } from '@/components/theme';
 import {
   AppText, Badge, Banner, Button, Card, EmptyState, IconButton, Row, Screen, Segmented, TextField,
 } from '@/components/ui';
+import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatTimestamp, pluralDays, pluralPoints } from '@/lib/dates';
 import { confirmAction } from '@/lib/dialogs';
 import {
   useChat, useDeleteChat, useFriendAction, useFriends, useLeaderboard, useSendChat,
@@ -16,13 +16,14 @@ import {
 type Section = 'chat' | 'friends' | 'leaderboard';
 
 export default function SocialScreen() {
+  const { t } = useI18n();
   const [section, setSection] = useState<Section>('chat');
   return (
-    <Screen title="Comunitate" subtitle="Chat, prieteni și clasament">
+    <Screen title={t('social.title')} subtitle={t('social.subtitle')}>
       <Segmented value={section} onChange={setSection} options={[
-        { value: 'chat', label: 'Chat', icon: 'chatbubbles-outline' },
-        { value: 'friends', label: 'Prieteni', icon: 'people-outline' },
-        { value: 'leaderboard', label: 'Clasament', icon: 'trophy-outline' },
+        { value: 'chat', label: t('social.chat'), icon: 'chatbubbles-outline' },
+        { value: 'friends', label: t('social.friends'), icon: 'people-outline' },
+        { value: 'leaderboard', label: t('social.leaderboard'), icon: 'trophy-outline' },
       ]} />
       {section === 'chat' && <ChatSection />}
       {section === 'friends' && <FriendsSection />}
@@ -32,6 +33,7 @@ export default function SocialScreen() {
 }
 
 function ChatSection() {
+  const { t, formatTime } = useI18n();
   const { user } = useAuth();
   const chat = useChat();
   const send = useSendChat();
@@ -54,13 +56,13 @@ function ChatSection() {
       {error || chat.error ? <Banner text={error ?? errorMessage(chat.error)} onClose={() => setError(null)} /> : null}
       <Row>
         <View style={{ flex: 1 }}>
-          <TextField value={text} onChangeText={setText} placeholder="Scrie un mesaj pentru comunitate…" maxLength={2000}
+          <TextField value={text} onChangeText={setText} placeholder={t('chat.placeholder')} maxLength={2000}
             onSubmitEditing={submit} returnKeyType="send" />
         </View>
-        <Button title="Trimite" icon="send" compact loading={send.isPending} onPress={submit} />
+        <Button title={t('chat.send')} icon="send" compact loading={send.isPending} onPress={submit} />
       </Row>
       {(chat.data ?? []).length === 0 && !chat.isLoading ? (
-        <Card><EmptyState icon="chatbubble-ellipses-outline" title="Niciun mesaj încă" text="Spune salut!" /></Card>
+        <Card><EmptyState icon="chatbubble-ellipses-outline" title={t('chat.emptyTitle')} text={t('chat.emptyText')} /></Card>
       ) : (
         <Card style={{ gap: 0, paddingVertical: 6 }}>
           {(chat.data ?? []).map((message, index) => (
@@ -68,13 +70,15 @@ function ChatSection() {
               <Row style={{ justifyContent: 'space-between' }}>
                 <Text style={styles.sender} numberOfLines={1}>
                   {message.senderName} <Text style={styles.handle}>@{message.senderUsername}</Text>
-                  {message.senderRole === 'ADMIN' ? <Text style={styles.admin}>  admin</Text> : null}
+                  {message.senderRole === 'ADMIN' ? <Text style={styles.admin}>  {t('chat.admin')}</Text> : null}
                 </Text>
                 <Row gap={4}>
-                  <AppText variant="small">{formatTimestamp(message.createdAt)}</AppText>
+                  <AppText variant="small">{formatTime(message.createdAt)}</AppText>
                   {user?.role === 'ADMIN' && (
-                    <IconButton icon="trash-outline" label="Șterge mesajul" tone="danger"
-                      onPress={async () => { if (await confirmAction('Ștergi mesajul?', message.text, 'Șterge')) remove.mutate(message.id); }} />
+                    <IconButton icon="trash-outline" label={t('chat.deleteLabel')} tone="danger"
+                      onPress={async () => {
+                        if (await confirmAction(t('chat.deleteConfirm'), message.text, t('common.delete'))) remove.mutate(message.id);
+                      }} />
                   )}
                 </Row>
               </Row>
@@ -88,6 +92,7 @@ function ChatSection() {
 }
 
 function FriendsSection() {
+  const { t } = useI18n();
   const friends = useFriends();
   const action = useFriendAction();
   const [username, setUsername] = useState('');
@@ -101,7 +106,7 @@ function FriendsSection() {
     try {
       await action.mutateAsync({ username: name });
       setUsername('');
-      setNotice(`@${name} a fost adăugat.`);
+      setNotice(t('friends.added', { username: name }));
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -115,11 +120,11 @@ function FriendsSection() {
         <View style={{ flex: 1 }}>
           <TextField value={username} onChangeText={setUsername} placeholder="@username" autoCapitalize="none" onSubmitEditing={add} />
         </View>
-        <Button compact title="Adaugă" icon="person-add-outline" loading={action.isPending} onPress={add} />
+        <Button compact title={t('friends.add')} icon="person-add-outline" loading={action.isPending} onPress={add} />
       </Row>
-      <AppText variant="small">Prietenii îți văd streak-ul și poți partaja activități cu ei. Emailul tău rămâne privat.</AppText>
+      <AppText variant="small">{t('friends.hint')}</AppText>
       {(friends.data ?? []).length === 0 && !friends.isLoading ? (
-        <Card><EmptyState icon="people-outline" title="Niciun prieten încă" text="Adaugă pe cineva după username." /></Card>
+        <Card><EmptyState icon="people-outline" title={t('friends.emptyTitle')} text={t('friends.emptyText')} /></Card>
       ) : (friends.data ?? []).map((friend) => (
         <Card key={friend.username}>
           <Row style={{ justifyContent: 'space-between' }}>
@@ -131,9 +136,11 @@ function FriendsSection() {
           </Row>
           <Row style={{ justifyContent: 'space-between' }}>
             <Badge tone={friend.direction === 'mutual' ? 'success' : friend.direction === 'incoming' ? 'info' : 'neutral'}
-              text={friend.direction === 'mutual' ? 'Prieteni' : friend.direction === 'incoming' ? 'Te-a adăugat' : 'Adăugat de tine'} />
-            <Button compact variant="ghost" title="Șterge" onPress={async () => {
-              if (await confirmAction('Ștergi prietenul?', `@${friend.username}`, 'Șterge')) action.mutate({ username: friend.username, remove: true });
+              text={t(friend.direction === 'mutual' ? 'friends.mutual' : friend.direction === 'incoming' ? 'friends.incoming' : 'friends.outgoing')} />
+            <Button compact variant="ghost" title={t('common.delete')} onPress={async () => {
+              if (await confirmAction(t('friends.removeConfirm'), `@${friend.username}`, t('common.delete'))) {
+                action.mutate({ username: friend.username, remove: true });
+              }
             }} />
           </Row>
         </Card>
@@ -143,6 +150,7 @@ function FriendsSection() {
 }
 
 function LeaderboardSection() {
+  const { t, tp } = useI18n();
   const { user } = useAuth();
   const leaderboard = useLeaderboard();
   return (
@@ -155,10 +163,10 @@ function LeaderboardSection() {
             <Row key={entry.username} style={[styles.rank, index > 0 && styles.separator, me && styles.me]}>
               <Text style={[styles.position, index < 3 && { color: colors.amber }]}>{index + 1}</Text>
               <View style={{ flex: 1 }}>
-                <AppText style={{ fontWeight: '700' }}>{entry.fullName}{me ? ' (tu)' : ''}</AppText>
-                <AppText variant="small">@{entry.username} · {pluralPoints(entry.points)}</AppText>
+                <AppText style={{ fontWeight: '700' }}>{me ? t('leaderboard.you', { name: entry.fullName }) : entry.fullName}</AppText>
+                <AppText variant="small">@{entry.username} · {tp('plural.points', entry.points)}</AppText>
               </View>
-              <AppText style={{ color: colors.amber, fontWeight: '800' }}>🔥 {pluralDays(entry.streak)}</AppText>
+              <AppText style={{ color: colors.amber, fontWeight: '800' }}>🔥 {tp('plural.days', entry.streak)}</AppText>
             </Row>
           );
         })}

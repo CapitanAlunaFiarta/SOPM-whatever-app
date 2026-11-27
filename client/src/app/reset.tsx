@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AuthShell } from '@/components/AuthShell';
 import { colors } from '@/components/theme';
 import { AppText, Banner, Button, TextField } from '@/components/ui';
+import { useI18n } from '@/i18n';
 import { errorMessage, request } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -11,24 +12,25 @@ import { useAuth } from '@/lib/auth';
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams<{ code?: string; sent?: string }>();
   const { status } = useAuth();
+  const { t } = useI18n();
   const [code, setCode] = useState(params.code ?? '');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
   const submit = async () => {
     setError(null);
     if (password.length < 12) {
-      setError('Parola nouă trebuie să aibă cel puțin 12 caractere.');
+      setError(t('password.tooShortNew'));
       return;
     }
     setBusy(true);
     try {
-      const result = await request<{ message: string }>('user', '/users/password-reset/confirm', {
+      await request('user', '/users/password-reset/confirm', {
         method: 'POST', body: { resetToken: code.trim(), newPassword: password },
       }, { auth: false });
-      setDone(result.message);
+      setDone(true);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -37,21 +39,21 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <AuthShell title="Parolă nouă" subtitle={params.sent ? 'Dacă datele sunt corecte, codul a ajuns pe email.' : undefined}>
+    <AuthShell title={t('reset.title')} subtitle={params.sent ? t('reset.sent') : undefined}>
       {done ? (
         <>
-          <Banner tone="success" text={done} />
-          <Button title={status === 'signedIn' ? 'Înapoi în aplicație' : 'Autentifică-te'} icon="log-in-outline"
+          <Banner tone="success" text={t('reset.done')} />
+          <Button title={status === 'signedIn' ? t('reset.backToApp') : t('reset.signIn')} icon="log-in-outline"
             onPress={() => router.replace(status === 'signedIn' ? '/' : '/login')} />
         </>
       ) : (
         <>
           {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
-          <TextField label="Codul din email" value={code} onChangeText={setCode} autoCapitalize="characters" placeholder="XXXXX-XXXXX" />
-          <TextField label="Parola nouă (minim 12 caractere)" value={password} onChangeText={setPassword} secureTextEntry
+          <TextField label={t('reset.code')} value={code} onChangeText={setCode} autoCapitalize="characters" placeholder="XXXXX-XXXXX" />
+          <TextField label={t('password.newLabel')} value={password} onChangeText={setPassword} secureTextEntry
             autoComplete="new-password" textContentType="newPassword" />
-          <Button title="Schimbă parola" icon="key-outline" loading={busy} onPress={submit} />
-          <Link href="/login"><AppText style={{ color: colors.muted }}>Înapoi la autentificare</AppText></Link>
+          <Button title={t('reset.submit')} icon="key-outline" loading={busy} onPress={submit} />
+          <Link href="/login"><AppText style={{ color: colors.muted }}>{t('auth.backToLogin')}</AppText></Link>
         </>
       )}
     </AuthShell>

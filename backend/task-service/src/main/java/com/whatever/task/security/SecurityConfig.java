@@ -1,5 +1,7 @@
 package com.whatever.task.security;
 
+import com.whatever.task.web.I18n;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -38,9 +40,9 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, ex) ->
-                                writeError(response, 401, "Autentificare necesara."))
+                                writeError(request, response, 401, "Autentificare necesară."))
                         .accessDeniedHandler((request, response, ex) ->
-                                writeError(response, 403, "Acces interzis.")))
+                                writeError(request, response, 403, "Acces interzis.")))
                 .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
@@ -65,10 +67,12 @@ public class SecurityConfig {
         return Arrays.stream(value.split(",")).map(String::trim).filter(item -> !item.isEmpty()).toList();
     }
 
-    static void writeError(HttpServletResponse response, int status, String message) throws IOException {
+    static void writeError(HttpServletRequest request, HttpServletResponse response, int status, String message)
+            throws IOException {
+        String text = I18n.translate(message, I18n.language(request.getHeader("Accept-Language")));
         response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("{\"error\":\"" + message.replace("\"", "'") + "\"}");
+        response.getWriter().write("{\"error\":\"" + text.replace("\"", "'") + "\"}");
     }
 }
