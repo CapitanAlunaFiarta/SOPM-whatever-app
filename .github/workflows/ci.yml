@@ -128,23 +128,33 @@ jobs:
         if: failure()
         run: bash .github/scripts/annotate.sh docker /tmp/docker-user.log /tmp/docker-task.log /tmp/docker-run.log /tmp/user-cds.log /tmp/task-cds.log
 
-  web:
-    name: Web (Vite)
+  client:
+    name: Aplicația Expo (web + Android + iOS)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
-        working-directory: web-app
+        working-directory: client
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: web-app/package-lock.json
-      - run: npm ci
-      - run: npm run build > /tmp/web-build.log 2>&1 || (cat /tmp/web-build.log; exit 1)
+          cache-dependency-path: client/package-lock.json
+      - name: npm ci
+        run: npm ci > /tmp/client-install.log 2>&1 || (tail -60 /tmp/client-install.log; exit 1)
+      - name: TypeScript
+        run: npx tsc --noEmit > /tmp/client-tsc.log 2>&1 || (cat /tmp/client-tsc.log; exit 1)
+      - name: ESLint
+        run: npx expo lint > /tmp/client-lint.log 2>&1 || (cat /tmp/client-lint.log; exit 1)
+      - name: Teste (jest)
+        run: npx jest --ci > /tmp/client-jest.log 2>&1 || (cat /tmp/client-jest.log; exit 1)
+      - name: Build web (ce publică Netlify)
+        run: npx expo export -p web > /tmp/client-web.log 2>&1 || (tail -80 /tmp/client-web.log; exit 1)
+      - name: Bundle Android + iOS (fără build nativ)
+        run: npx expo export -p android -p ios --output-dir /tmp/native-bundle > /tmp/client-native.log 2>&1 || (tail -80 /tmp/client-native.log; exit 1)
       - name: Adnotări erori
         if: failure()
         working-directory: .
-        run: bash .github/scripts/annotate.sh web /tmp/web-build.log
+        run: bash .github/scripts/annotate.sh client /tmp/client-install.log /tmp/client-tsc.log /tmp/client-lint.log /tmp/client-jest.log /tmp/client-web.log /tmp/client-native.log
