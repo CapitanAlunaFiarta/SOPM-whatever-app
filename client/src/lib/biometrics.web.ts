@@ -45,22 +45,38 @@ function withoutExtensions<T extends Record<string, any>>(options: T): T {
   return rest as T;
 }
 
+/**
+ * Credențialul în formatul JSON WebAuthn citit de serverul Yubico. Răspunsul la înregistrare
+ * (attestation) și cel la autentificare (assertion) au câmpuri diferite, iar serverul respinge
+ * câmpurile necunoscute (de ex. `userHandle` într-un răspuns de înregistrare).
+ */
 function credentialJson(credential: PublicKeyCredential): string {
-  const response = credential.response as AuthenticatorAttestationResponse & AuthenticatorAssertionResponse;
-  const encode = (value?: ArrayBuffer | null) => (value ? bytesToBase64Url(new Uint8Array(value)) : undefined);
+  const encode = (value: ArrayBuffer) => bytesToBase64Url(new Uint8Array(value));
+  const raw = credential.response;
+  let response: Record<string, unknown>;
+  if ('attestationObject' in raw) {
+    const attestation = raw as AuthenticatorAttestationResponse;
+    response = {
+      clientDataJSON: encode(attestation.clientDataJSON),
+      attestationObject: encode(attestation.attestationObject),
+      ...(typeof attestation.getTransports === 'function' ? { transports: attestation.getTransports() } : {}),
+    };
+  } else {
+    const assertion = raw as AuthenticatorAssertionResponse;
+    response = {
+      clientDataJSON: encode(assertion.clientDataJSON),
+      authenticatorData: encode(assertion.authenticatorData),
+      signature: encode(assertion.signature),
+      userHandle: assertion.userHandle ? encode(assertion.userHandle) : null,
+    };
+  }
   return JSON.stringify({
     id: credential.id,
     rawId: encode(credential.rawId),
     type: credential.type,
-    authenticatorAttachment: credential.authenticatorAttachment ?? undefined,
+    ...(credential.authenticatorAttachment ? { authenticatorAttachment: credential.authenticatorAttachment } : {}),
     clientExtensionResults: credential.getClientExtensionResults?.() ?? {},
-    response: {
-      clientDataJSON: encode(response.clientDataJSON),
-      attestationObject: encode(response.attestationObject),
-      authenticatorData: encode(response.authenticatorData),
-      signature: encode(response.signature),
-      userHandle: response.userHandle ? encode(response.userHandle) : null,
-    },
+    response,
   });
 }
 
