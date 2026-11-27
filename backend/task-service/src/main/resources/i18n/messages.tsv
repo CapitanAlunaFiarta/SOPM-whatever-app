@@ -33,3 +33,11 @@ Latitudine invalidă.	Invalid latitude.	Latitud no válida.
 Longitudine invalidă.	Invalid longitude.	Longitud no válida.
 Raza trebuie să fie între 10 și 10000 m.	The radius must be between 10 and 10000 m.	El radio debe estar entre 10 y 10000 m.
 Scadența este obligatorie.	The due date is required.	La fecha límite es obligatoria.
+Poți invita cel mult 10 prieteni.	You can invite at most 10 friends.	Puedes invitar como máximo a 10 amigos.
+Invitația nu mai este valabilă.	This invitation is no longer valid.	La invitación ya no es válida.
+Acceptă mai întâi invitația.	Accept the invitation first.	Acepta primero la invitación.
+Ai confirmat deja această activitate.	You've already confirmed this activity.	Ya confirmaste esta actividad.
+Chatul se deschide după ce un prieten acceptă invitația.	The chat opens once a friend accepts the invitation.	El chat se abre cuando un amigo acepta la invitación.
+Chatul acestei activități s-a închis.	This activity's chat is closed.	El chat de esta actividad está cerrado.
+Mesajul nu poate fi gol.	The message can't be empty.	El mensaje no puede estar vacío.
+Mesajul poate avea cel mult 2000 de caractere.	The message can be at most 2000 characters long.	El mensaje puede tener como máximo 2000 caracteres.

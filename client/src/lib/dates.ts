@@ -41,13 +41,17 @@ type DateOptions = {
   today?: string;
   /** În mijlocul unei propoziții: „azi” în loc de „Azi”. */
   inline?: boolean;
+  /** Mereu ziua și luna (ex. „pe 2 dec.”), fără „Azi”/„Mâine”. */
+  absolute?: boolean;
 };
 
 /** „Azi”, „Mâine”, „Ieri” sau „12 dec.” (en: „Dec 12”), cu anul doar dacă diferă de cel curent. */
-export function friendlyDate(value: string, language: Language = 'ro', { today = localDate(), inline = false }: DateOptions = {}): string {
+export function friendlyDate(
+  value: string, language: Language = 'ro', { today = localDate(), inline = false, absolute = false }: DateOptions = {},
+): string {
   const reference = parseLocalDate(today);
   const words = RELATIVE[language];
-  const relative = value === today ? words.today
+  const relative = absolute ? null : value === today ? words.today
     : value === localDate(1, reference) ? words.tomorrow
       : value === localDate(-1, reference) ? words.yesterday : null;
   if (relative) return inline ? relative.toLowerCase() : relative;

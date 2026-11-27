@@ -1,15 +1,18 @@
 // Test end-to-end al aplicației web (client/) într-un Chrome real, pe backend-ul pornit local în CI.
 // Acoperă: cont nou, activități (simplă, cu passkey, cu locație), streak/puncte, cercul de progres,
-// recap-ul lunar pe categorii, chat, deconectare, rute protejate, schimbarea limbii (inclusiv mesajele
+// recap-ul lunar pe categorii, activitate cu un prieten (invitație + chatul ei), chat, deconectare, rute protejate, schimbarea limbii (inclusiv mesajele
 // traduse de server), resetare parolă prin cod, panoul de admin.
 // Variabile: UI_URL (implicit http://localhost:5173), CHROME_PATH, USER_LOG (log-ul user-service,
-// pentru codul de resetare când MAIL_PROVIDER=log), ADMIN_EMAIL, ADMIN_PASSWORD.
+// pentru codul de resetare când MAIL_PROVIDER=log), ADMIN_EMAIL, ADMIN_PASSWORD, USER_API, TASK_API
+// (prietenul din testul de grup e creat direct prin API).
 import { existsSync, readFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 
 const BASE = process.env.UI_URL || 'http://localhost:5173';
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const USER_LOG = process.env.USER_LOG || '';
+const USER_API = process.env.USER_API || 'http://localhost:8081/api';
+const TASK_API = process.env.TASK_API || 'http://localhost:8082/api';
 const run = Date.now().toString(36);
 const me = {
   fullName: 'Ana Testescu',
@@ -94,6 +97,18 @@ const field = (label) => visible(page.getByLabel(label, { exact: true }));
 const seen = (text) => visible(page.getByText(text)).first().waitFor();
 const path = () => new URL(page.url()).pathname;
 
+/** Cerere directă la backend (pentru al doilea utilizator din testul de grup). */
+async function api(service, endpoint, { token, body } = {}) {
+  const response = await fetch(`${service === 'user' ? USER_API : TASK_API}${endpoint}`, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(`${endpoint} → ${response.status} ${JSON.stringify(data)}`);
+  return data;
+}
+
 async function waitPath(expected) {
   await page.waitForURL((url) => url.pathname === expected, { timeout: 25_000 });
 }
@@ -125,10 +140,11 @@ async function confirmTask(title) {
   await taskCard(title).getByRole('button', { name: 'Confirmă', exact: true }).click();
 }
 
-async function createTask(title, { biometrics = false, location = false, category } = {}) {
+async function createTask(title, { biometrics = false, location = false, category, friends = [] } = {}) {
   await page.goto(`${BASE}/task/new`);
   await field('Ce vrei să faci?').fill(title);
   if (category) await button(category).click();
+  for (const username of friends) await visible(page.getByRole('checkbox', { name: `@${username}` })).click();
   if (biometrics) await visible(page.getByRole('switch', { name: 'Confirmare cu biometrie' })).click();
   if (location) {
     await visible(page.getByRole('switch', { name: 'Confirmare în locație' })).click();
@@ -244,6 +260,37 @@ if (ok) {
     await seen('Divertisment');
     await button('Închide').click();
     await waitPath('/');
+  });
+
+  await step('activitate cu un prieten: invitație, acceptare și chatul activității', async () => {
+    const friend = {
+      fullName: 'Bob Prieten', username: `bob_${run}`, email: `bob_${run}@ci.local`, password: 'parola-bob-foarte-sigura-1',
+    };
+    const { token } = await api('user', '/users/register', { body: friend });
+    await api('user', '/friends', { token, body: { username: me.username } });
+    await createTask('Alergăm împreună', { category: 'Activitate fizică / sport', friends: [friend.username] });
+    await seen(`@${friend.username} · invitat`);
+    const invite = (await api('task', '/tasks', { token })).find((task) => task.title === 'Alergăm împreună');
+    if (invite?.myStatus !== 'INVITED') throw new Error(`Prietenul nu are invitația: ${JSON.stringify(invite)}`);
+    await api('task', `/tasks/${invite.id}/accept`, { token, body: {} });
+    await api('task', `/tasks/${invite.id}/messages`, { token, body: { text: 'Salut! Ne vedem la 7?' } });
+    await page.reload();
+    await seen('0/2 confirmări');
+    await taskCard('Alergăm împreună', 'Chat · 1').getByRole('button', { name: 'Chat · 1', exact: true }).click();
+    await waitPath(`/chat/${invite.id}`);
+    await seen('Salut! Ne vedem la 7?');
+    await seen('nu a confirmat încă');
+    await visible(page.getByPlaceholder('Scrie un mesaj pentru grup…')).fill('Perfect, vin și eu!');
+    await button('Trimite').click();
+    await seen('Perfect, vin și eu!');
+    const seenByFriend = await api('task', `/tasks/${invite.id}/messages`, { token });
+    if (!seenByFriend.some((message) => message.text === 'Perfect, vin și eu!' && !message.mine)) {
+      throw new Error(`Prietenul nu vede mesajul: ${JSON.stringify(seenByFriend)}`);
+    }
+    const general = await api('user', '/chat', { token });
+    if (general.some((message) => message.text === 'Perfect, vin și eu!')) throw new Error('Mesajul a ajuns în chatul general');
+    await button('Închide').click();
+    await waitPath('/tasks');
   });
 
   await step('chat: mesajul apare în listă', async () => {

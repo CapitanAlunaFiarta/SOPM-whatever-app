@@ -7,7 +7,7 @@ import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
 import type {
-  AdminUser, ChatMessage, CompletionResult, Friend, LeaderboardEntry, Recap, Session, Task, TaskInput, User,
+  AdminUser, ChatMessage, CompletionResult, Friend, LeaderboardEntry, Recap, Session, Task, TaskInput, TaskMessage, User,
 } from './types';
 
 export const keys = {
@@ -18,6 +18,7 @@ export const keys = {
   leaderboard: ['leaderboard'] as const,
   adminUsers: ['admin-users'] as const,
   recap: ['recap'] as const,
+  taskMessages: (id: number) => ['task-messages', id] as const,
 };
 
 export function useMe() {
@@ -134,6 +135,37 @@ export function useTaskAction() {
         ? request('task', `/tasks/${task.id}`, { method: 'DELETE' })
         : request('task', `/tasks/${task.id}/${action}`, { method: 'POST' }),
     onSuccess: refresh,
+  });
+}
+
+/** Invitatul acceptă sau refuză o activitate de grup. */
+export function useInviteResponse() {
+  const refresh = useRefreshAfterTaskChange();
+  return useMutation({
+    mutationFn: ({ task, accept }: { task: Task; accept: boolean }) =>
+      request('task', `/tasks/${task.id}/${accept ? 'accept' : 'decline'}`, { method: 'POST' }),
+    onSuccess: refresh,
+  });
+}
+
+/** Chatul unei activități de grup; se reîmprospătează cât timp ecranul e deschis. */
+export function useTaskMessages(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.taskMessages(id),
+    enabled,
+    refetchInterval: 5000,
+    queryFn: () => request<TaskMessage[]>('task', `/tasks/${id}/messages`),
+  });
+}
+
+export function useSendTaskMessage(id: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => request<TaskMessage>('task', `/tasks/${id}/messages`, { method: 'POST', body: { text } }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.taskMessages(id) }),
+      client.invalidateQueries({ queryKey: keys.tasks }),
+    ]),
   });
 }
 

@@ -8,8 +8,12 @@ import org.junit.jupiter.api.Test;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -74,5 +78,32 @@ class TaskRulesTest {
         assertFalse(jwt.isValidBiometric(token, "bob@example.com", 12));
         assertTrue(jwt.parseAccess(token).isEmpty());
         assertFalse(jwt.isValidBiometric(null, "ana@example.com", 12));
+    }
+
+    @Test
+    void invitedUsernamesAreCleanedAndUnique() {
+        assertEquals(List.of("ana", "ion"), TaskRules.invitedUsernames(Arrays.asList("@ana", " ion ", "", null, "ana"), null));
+        // Clienții vechi trimit doar „friend”.
+        assertEquals(List.of("ana"), TaskRules.invitedUsernames(null, "@ana"));
+        assertEquals(List.of(), TaskRules.invitedUsernames(null, " "));
+        // Lista nouă (chiar goală) are prioritate față de câmpul vechi.
+        assertEquals(List.of(), TaskRules.invitedUsernames(List.of(), "ana"));
+        List<String> tooMany = Collections.nCopies(11, "x").stream().map(value -> value + Math.random()).toList();
+        assertEquals(400, assertThrows(ApiException.class, () -> TaskRules.invitedUsernames(tooMany, null)).status());
+    }
+
+    @Test
+    void confirmationDependsOnRecurrence() {
+        assertFalse(TaskRules.confirmed(null, false, TODAY));
+        assertTrue(TaskRules.confirmed(TODAY.minusDays(3), false, TODAY));
+        assertFalse(TaskRules.confirmed(TODAY.minusDays(1), true, TODAY));
+        assertTrue(TaskRules.confirmed(TODAY, true, TODAY));
+    }
+
+    @Test
+    void groupChatClosesFiveDaysAfterTheActivityEnds() {
+        Instant finished = Instant.parse("2026-11-20T10:00:00Z");
+        assertEquals(Instant.parse("2026-11-25T10:00:00Z"), TaskRules.chatClosesAt(finished));
+        assertNull(TaskRules.chatClosesAt(null));
     }
 }

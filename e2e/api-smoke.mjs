@@ -203,10 +203,84 @@ async function main() {
   const tasksB = await call('GET', `${TASK}/tasks`, { token: tokenB });
   const seen = (tasksB.json || []).find((task) => task.id === shared.json?.id);
   check('B vede task-ul partajat, fără emailul lui A', seen && seen.isOwner === false && seen.ownerUsername === userA.username && !('ownerEmail' in seen), seen);
+  check('partajarea veche (friend) devine invitație', seen?.myStatus === 'INVITED' && seen?.friend === userB.username
+    && seen?.participants?.[0]?.username === userB.username, seen);
   const bCompletes = await call('POST', `${TASK}/tasks/${shared.json?.id}/verify-complete`, { token: tokenB, body: {} });
-  check('B nu poate finaliza task-ul lui A', bCompletes.status === 404, bCompletes);
+  check('invitatul nu poate confirma înainte să accepte', bCompletes.status === 409, bCompletes);
+  const cCompletes = await call('POST', `${TASK}/tasks/${shared.json?.id}/verify-complete`, { token: tokenC, body: {} });
+  check('un străin nu vede activitatea', cCompletes.status === 404, cCompletes);
   const leaderboard = await call('GET', `${USER}/leaderboard`, { token: tokenC });
   check('clasament fără emailuri', leaderboard.status === 200 && leaderboard.json?.length > 0 && !('email' in leaderboard.json[0]), leaderboard.json?.[0]);
+
+  // --- activități de grup: invitații, fiecare membru confirmă, chat separat de cel general
+  await call('POST', `${USER}/friends`, { token: tokenC, body: { username: userA.username } });
+  const group = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({
+    title: 'Alergăm împreună', category: 'SPORT', participants: [userB.username, `@${userC.username}`, userB.username],
+  }) });
+  const gid = group.json?.id;
+  check('grup: 2 invitați (fără dubluri), doar proprietarul e membru', group.status === 200
+    && group.json?.participants?.length === 2 && group.json.participants.every((p) => p.status === 'INVITED')
+    && group.json.memberCount === 1 && group.json.myStatus === 'OWNER', group.json);
+  check('grup: chatul se deschide abia după o acceptare', group.json?.chat?.available === false, group.json?.chat);
+  const earlyMessage = await call('POST', `${TASK}/tasks/${gid}/messages`, { token: tokenA, body: { text: 'Hei' } });
+  check('grup: mesaj înainte de acceptare → 409', earlyMessage.status === 409, earlyMessage);
+  const invitedChat = await call('GET', `${TASK}/tasks/${gid}/messages`, { token: tokenB });
+  check('grup: invitatul nu citește chatul', invitedChat.status === 409, invitedChat);
+  const accepted = await call('POST', `${TASK}/tasks/${gid}/accept`, { token: tokenB });
+  check('grup: B acceptă și devine membru', accepted.status === 200 && accepted.json?.myStatus === 'ACCEPTED'
+    && accepted.json?.memberCount === 2 && accepted.json?.chat?.available === true, accepted.json);
+  const acceptAgain = await call('POST', `${TASK}/tasks/${gid}/accept`, { token: tokenB });
+  check('grup: a doua acceptare → 409', acceptAgain.status === 409, acceptAgain);
+  const sent = await call('POST', `${TASK}/tasks/${gid}/messages`, { token: tokenA, body: { text: 'Ne vedem la 7' } });
+  const groupChat = await call('GET', `${TASK}/tasks/${gid}/messages`, { token: tokenB });
+  check('grup: chatul activității, fără emailuri', sent.status === 200 && sent.json?.mine === true
+    && groupChat.json?.length === 1 && groupChat.json[0].text === 'Ne vedem la 7' && groupChat.json[0].mine === false
+    && groupChat.json[0].username === userA.username && !('email' in groupChat.json[0]), groupChat.json);
+  const emptyMessage = await call('POST', `${TASK}/tasks/${gid}/messages`, { token: tokenB, body: { text: '   ' } });
+  check('grup: mesaj gol → 400', emptyMessage.status === 400, emptyMessage);
+  const globalChat = await call('GET', `${USER}/chat`, { token: tokenB });
+  check('grup: mesajul nu apare în chatul general', !(globalChat.json || []).some((m) => m.text === 'Ne vedem la 7'), globalChat.json);
+  const aConfirms = await call('POST', `${TASK}/tasks/${gid}/verify-complete`, { token: tokenA, body: {} });
+  check('grup: A confirmă, activitatea îi așteaptă pe ceilalți', aConfirms.status === 200
+    && aConfirms.json?.task?.status === 'Upcoming' && aConfirms.json.task.confirmedByMe === true
+    && aConfirms.json.task.confirmedCount === 1, aConfirms.json?.task);
+  const aAgain = await call('POST', `${TASK}/tasks/${gid}/verify-complete`, { token: tokenA, body: {} });
+  check('grup: aceeași persoană nu confirmă de două ori', aAgain.status === 409, aAgain);
+  const bConfirms = await call('POST', `${TASK}/tasks/${gid}/verify-complete`, { token: tokenB, body: {} });
+  check('grup: B confirmă și primește streak + punct; C n-a răspuns încă', bConfirms.status === 200
+    && bConfirms.json?.points === 1 && bConfirms.json?.streak === 1 && bConfirms.json?.task?.status === 'Upcoming', bConfirms.json);
+  const cDeclines = await call('POST', `${TASK}/tasks/${gid}/decline`, { token: tokenC });
+  const finished = (await call('GET', `${TASK}/tasks`, { token: tokenA })).json?.find((task) => task.id === gid);
+  check('grup: după refuzul lui C toți membrii au confirmat → finalizată, chat deschis încă 5 zile',
+    cDeclines.status === 200 && finished?.status === 'Completed' && finished.chat.readOnly === false
+    && Date.parse(finished.chat.closesAt) > Date.now() + 4 * 86400000, finished);
+  const cList = await call('GET', `${TASK}/tasks`, { token: tokenC });
+  const cChat = await call('GET', `${TASK}/tasks/${gid}/messages`, { token: tokenC });
+  check('grup: cine refuză nu mai vede activitatea', !(cList.json || []).some((task) => task.id === gid) && cChat.status === 404, cChat);
+  const recapB = await call('GET', `${TASK}/tasks/recap`, { token: tokenB });
+  check('grup: recap-ul lui B numără activitatea la Sport',
+    recapB.json?.categories?.find((item) => item.category === 'SPORT')?.count === 1, recapB.json);
+
+  const daily = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({
+    title: 'Citim zilnic', isRecurring: true, participants: [userB.username, userC.username],
+  }) });
+  const did = daily.json?.id;
+  await call('POST', `${TASK}/tasks/${did}/accept`, { token: tokenB });
+  const legacyEdit = await call('PUT', `${TASK}/tasks/${did}`, { token: tokenA, body: baseTask({
+    title: 'Citim zilnic', isRecurring: true, friend: userB.username,
+  }) });
+  check('grup: o aplicație veche (doar „friend”) nu scoate invitați', legacyEdit.status === 200
+    && legacyEdit.json?.participants?.length === 2, legacyEdit.json);
+  const removeC = await call('PUT', `${TASK}/tasks/${did}`, { token: tokenA, body: baseTask({
+    title: 'Citim zilnic', isRecurring: true, participants: [userB.username],
+  }) });
+  check('grup: proprietarul scoate un invitat', removeC.status === 200 && removeC.json?.participants?.length === 1, removeC.json);
+  const aDaily = await call('POST', `${TASK}/tasks/${did}/verify-complete`, { token: tokenA, body: {} });
+  check('grup zilnic: rămâne pe azi până confirmă toți', aDaily.json?.task?.dueDate === today
+    && aDaily.json.task.completedToday === true, aDaily.json?.task);
+  const bDaily = await call('POST', `${TASK}/tasks/${did}/verify-complete`, { token: tokenB, body: {} });
+  check('grup zilnic: după ultimul membru trece pe mâine', bDaily.json?.task?.dueDate === tomorrow
+    && bDaily.json.task.status === 'Upcoming' && bDaily.json.task.confirmedCount === 2, bDaily.json?.task);
 
   // --- freeze
   const overdue = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Restant', dueDate: yesterday }) });
@@ -243,9 +317,10 @@ async function main() {
   check('admin vede utilizatorii', adminUsers.status === 200 && adminUsers.json?.length >= 4, adminUsers.status);
   const userAdmin = await call('GET', `${USER}/admin/users`, { token: tokenA });
   check('utilizator obișnuit → 403 pe admin', userAdmin.status === 403, userAdmin);
+  const beforeBonus = await call('GET', `${USER}/users/me`, { token: tokenB });
   const bonus = await call('POST', `${USER}/admin/users/${encodeURIComponent(userB.email)}/bonus-streak`, { token: adminLogin.json?.token });
   const meB = await call('GET', `${USER}/users/me`, { token: tokenB });
-  check('bonus streak +5', bonus.status === 200 && meB.json?.streak === 5, meB.json);
+  check('bonus streak +5', bonus.status === 200 && meB.json?.streak === (beforeBonus.json?.streak ?? 0) + 5, meB.json);
 
   // --- resetare parolă (MAIL_PROVIDER=log în CI)
   const resetRequest = await call('POST', `${USER}/users/password-reset/request`, { body: { email: userC.email, username: userC.username } });

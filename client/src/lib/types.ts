@@ -42,13 +42,55 @@ export type Task = {
   radius: number;
   requiresBiometrics: boolean;
   dueDate: string;
+  /** Câmp vechi (primul invitat), păstrat pentru aplicațiile mai vechi. */
   friend: string;
   isOwner: boolean;
   ownerUsername: string;
   ownerName: string;
+  /** Ultima mea confirmare. */
   lastCompletedOn: string | null;
+  /** Am confirmat azi. */
   completedToday: boolean;
+  /** Rolul meu: proprietar, invitat (n-am răspuns) sau membru (am acceptat). */
+  myStatus: 'OWNER' | ParticipantStatus | 'NONE';
+  /** Mi-am făcut partea: azi (activitate zilnică) sau oricând (activitate unică). */
+  confirmedByMe: boolean;
+  participants: Participant[];
+  /** Proprietarul + cei care au acceptat. */
+  memberCount: number;
+  confirmedCount: number;
+  chat: TaskChat;
 };
+
+export type ParticipantStatus = 'INVITED' | 'ACCEPTED' | 'DECLINED';
+
+export type Participant = {
+  username: string;
+  fullName: string;
+  status: ParticipantStatus;
+  /** Și-a făcut partea (azi, la activitățile zilnice). */
+  confirmed: boolean;
+};
+
+/** Chatul unei activități de grup: se deschide după prima acceptare, doar de citit la 5 zile după încheiere. */
+export type TaskChat = {
+  available: boolean;
+  readOnly: boolean;
+  closesAt: string | null;
+  messageCount: number;
+};
+
+export type TaskMessage = {
+  id: number;
+  text: string;
+  createdAt: string;
+  username: string;
+  fullName: string;
+  mine: boolean;
+};
+
+/** Pot confirma și deschide chatul: sunt proprietarul sau am acceptat invitația. */
+export const isMember = (task: Task) => task.isOwner || task.myStatus === 'ACCEPTED';
 
 export type TaskInput = {
   title: string;
@@ -61,7 +103,8 @@ export type TaskInput = {
   longitude: number;
   radius: number;
   requiresBiometrics: boolean;
-  friend: string;
+  /** Usernamele prietenilor invitați (cei care au refuzat și nu mai sunt aleși rămân „refuzat”). */
+  participants: string[];
 };
 
 export type CompletionResult = {

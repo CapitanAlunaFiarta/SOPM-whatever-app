@@ -85,6 +85,28 @@ public class TaskController {
         return tasks.complete(user, id, request);
     }
 
+    /** Invitatul acceptă: devine membru, vede chatul și își poate confirma partea. */
+    @PostMapping("/{id}/accept")
+    public Map<String, Object> accept(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
+        return tasks.respond(user, id, true);
+    }
+
+    @PostMapping("/{id}/decline")
+    public Map<String, Object> decline(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
+        return tasks.respond(user, id, false);
+    }
+
+    @GetMapping("/{id}/messages")
+    public List<Map<String, Object>> messages(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
+        return tasks.messages(user, id);
+    }
+
+    @PostMapping("/{id}/messages")
+    public Map<String, Object> sendMessage(@AuthenticationPrincipal AuthUser user, @PathVariable long id,
+                                           @Valid @RequestBody MessageRequest request) {
+        return tasks.sendMessage(user, id, request.text());
+    }
+
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
         tasks.delete(user, id);
@@ -102,7 +124,15 @@ public class TaskController {
             @Min(value = 10, message = "Raza trebuie să fie între 10 și 10000 m.") @Max(value = 10000, message = "Raza trebuie să fie între 10 și 10000 m.") int radius,
             boolean requiresBiometrics,
             @NotNull(message = "Scadența este obligatorie.") LocalDate dueDate,
-            @Size(max = 100) String friend) {
+            /** Câmpul vechi (un singur prieten); clienții noi trimit „participants”. */
+            @Size(max = 100) String friend,
+            /** Usernamele prietenilor invitați; null = clientul nu știe de invitații multiple. */
+            @Size(max = 10, message = "Poți invita cel mult 10 prieteni.") List<@Size(max = 100) String> participants) {
+    }
+
+    public record MessageRequest(
+            @NotBlank(message = "Mesajul nu poate fi gol.")
+            @Size(max = 2000, message = "Mesajul poate avea cel mult 2000 de caractere.") String text) {
     }
 
     /** Câmpul vechi "mobileBiometricConfirmed" este ignorat: biometria se dovedește doar prin biometricToken. */

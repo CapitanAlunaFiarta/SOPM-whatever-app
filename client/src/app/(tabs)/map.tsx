@@ -8,7 +8,7 @@ import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { currentPosition, distanceMeters } from '@/lib/location';
 import { useTasks } from '@/lib/queries';
-import { DEFAULT_COORDS, type Coordinates } from '@/lib/types';
+import { DEFAULT_COORDS, isMember, type Coordinates } from '@/lib/types';
 
 export default function MapScreen() {
   const { t } = useI18n();
@@ -20,7 +20,7 @@ export default function MapScreen() {
     currentPosition().then(setHere).catch((error) => setLocationError(errorMessage(error)));
   }, []);
 
-  const located = (tasks.data ?? []).filter((task) => task.requiresLocation && task.isOwner
+  const located = (tasks.data ?? []).filter((task) => task.requiresLocation && isMember(task) && !task.confirmedByMe
     && (task.status === 'Upcoming' || task.status === 'Overdue'));
   const sorted = here ? [...located].sort((a, b) => distanceMeters(here, a) - distanceMeters(here, b)) : located;
 

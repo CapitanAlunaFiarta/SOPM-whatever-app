@@ -2,10 +2,15 @@ package com.whatever.task.tasks;
 
 import com.whatever.task.web.ApiException;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /** Reguli pure (fără bază de date): valori permise, distanță, streak zilnic, freeze-uri lunare. */
 public final class TaskRules {
@@ -21,6 +26,10 @@ public final class TaskRules {
     public static final int MONTHLY_FREEZES = 3;
     /** Toleranța maximă acceptată pentru precizia GPS raportată de telefon. */
     public static final double MAX_ACCURACY_TOLERANCE_METERS = 50;
+    /** Câți prieteni pot fi invitați la o activitate. */
+    public static final int MAX_PARTICIPANTS = 10;
+    /** Chatul unei activități de grup rămâne deschis încă 5 zile după ce activitatea s-a încheiat. */
+    public static final Duration CHAT_OPEN_AFTER_FINISH = Duration.ofDays(5);
 
     private TaskRules() {
     }
@@ -83,5 +92,31 @@ public final class TaskRules {
     public static LocalDate lastActiveAfterFreeze(LocalDate lastActive, LocalDate today) {
         if (lastActive == null) return null;
         return lastActive.isBefore(today.minusDays(1)) ? lastActive.plusDays(1) : lastActive;
+    }
+
+    /**
+     * Usernamele invitate: lista nouă „participants” sau, de la clienții vechi, câmpul „friend”.
+     * Fără „@”, fără goluri și fără dubluri (ordinea se păstrează).
+     */
+    public static List<String> invitedUsernames(List<String> participants, String friend) {
+        List<String> raw = participants != null ? participants : friend == null ? List.of() : List.of(friend);
+        Set<String> unique = new LinkedHashSet<>();
+        for (String value : raw) {
+            String username = value == null ? "" : value.trim().replaceFirst("^@", "");
+            if (!username.isEmpty()) unique.add(username);
+        }
+        if (unique.size() > MAX_PARTICIPANTS) throw new ApiException(400, "Poți invita cel mult 10 prieteni.");
+        return new ArrayList<>(unique);
+    }
+
+    /** Și-a făcut membrul partea? La activitățile zilnice contează doar azi, la cele unice orice finalizare. */
+    public static boolean confirmed(LocalDate lastCompletion, boolean recurring, LocalDate today) {
+        if (lastCompletion == null) return false;
+        return !recurring || lastCompletion.equals(today);
+    }
+
+    /** Momentul de la care chatul activității devine doar de citit (null cât timp activitatea continuă). */
+    public static Instant chatClosesAt(Instant finishedAt) {
+        return finishedAt == null ? null : finishedAt.plus(CHAT_OPEN_AFTER_FINISH);
     }
 }

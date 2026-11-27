@@ -5,8 +5,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { confirmAction, showMessage } from '@/lib/dialogs';
-import { useCompleteTask, useTaskAction } from '@/lib/queries';
-import type { Task } from '@/lib/types';
+import { useCompleteTask, useInviteResponse, useTaskAction } from '@/lib/queries';
+import { isMember, type Task } from '@/lib/types';
 
 import { CATEGORY_ICONS, isCategory } from './categories';
 import { colors, radius, type Tone } from './theme';
@@ -23,8 +23,14 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
   const { t, tp, formatDate } = useI18n();
   const complete = useCompleteTask();
   const action = useTaskAction();
+  const invite = useInviteResponse();
   const active = task.status === 'Upcoming' || task.status === 'Overdue';
-  const canComplete = task.isOwner && active && !task.completedToday;
+  const member = isMember(task);
+  const invited = task.myStatus === 'INVITED';
+  const people = (task.participants ?? []).filter((person) => person.status !== 'DECLINED');
+  const canComplete = member && active && !task.confirmedByMe;
+  // Activitate unică de grup: mi-am făcut partea, dar nu au confirmat încă toți.
+  const waiting = member && active && task.confirmedByMe && !task.isRecurring && people.length > 0;
 
   const onComplete = async () => {
     try {
@@ -34,6 +40,17 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
       }));
     } catch (error) {
       showMessage(t('card.confirmFailed'), errorMessage(error));
+    }
+  };
+
+  const respond = async (accept: boolean) => {
+    if (!accept && !(await confirmAction(t('group.declineTitle'), t('group.declineText'), t('group.decline')))) return;
+    try {
+      await invite.mutateAsync({ task, accept });
+      // După acceptare se deschide direct chatul activității.
+      if (accept) router.push(`/chat/${task.id}`);
+    } catch (error) {
+      showMessage(t('card.actionFailed'), errorMessage(error));
     }
   };
 
@@ -73,26 +90,47 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
           {task.isRecurring && <Badge text={t('card.daily', { count: task.streakCount })} icon="repeat" tone="accent" />}
           {task.requiresLocation && <Badge text={t('card.gps', { radius: task.radius })} icon="location-outline" tone="info" />}
           {task.requiresBiometrics && <Badge text={t('bio.generic')} icon="finger-print" tone="accent" />}
-          {!task.isOwner && <Badge text={t('card.from', { username: task.ownerUsername })} icon="people-outline" />}
-          {task.isOwner && task.friend ? <Badge text={t('card.with', { username: task.friend })} icon="people-outline" /> : null}
+          {!task.isOwner && !invited && <Badge text={t('card.from', { username: task.ownerUsername })} icon="people-outline" />}
+          {people.length > 0 && member && (
+            <Badge text={t('group.confirmations', { done: task.confirmedCount, total: task.memberCount })} icon="people-outline"
+              tone={task.confirmedCount === task.memberCount ? 'success' : 'neutral'} />
+          )}
+          {people.map((person) => (
+            <Badge key={person.username} tone={person.confirmed ? 'success' : 'neutral'}
+              text={person.status === 'INVITED' ? t('group.invited', { username: person.username })
+                : `@${person.username}${person.confirmed ? ' ✓' : ''}`} />
+          ))}
+        </View>
+      )}
+      {invited && <Text style={styles.invite}>{t('group.inviteFrom', { username: task.ownerUsername })}</Text>}
+      {waiting && !compact && <Text style={styles.meta}>{t('group.waiting')}</Text>}
+
+      {invited && (
+        <View style={styles.actions}>
+          <Button compact title={t('group.accept')} icon="checkmark" loading={invite.isPending} onPress={() => respond(true)} />
+          <Button compact variant="ghost" title={t('group.decline')} onPress={() => respond(false)} />
         </View>
       )}
 
-      {task.isOwner && (canComplete || !compact) && (
+      {member && (canComplete || !compact) && (
         <View style={styles.actions}>
           {canComplete && (
             <Button compact title={t('card.confirm')} icon="checkmark-circle" loading={complete.isPending} onPress={onComplete} />
           )}
-          {task.status === 'Overdue' && !compact && (
+          {task.chat?.available && !compact && (
+            <Button compact variant="secondary" icon="chatbubbles-outline" onPress={() => router.push(`/chat/${task.id}`)}
+              title={task.chat.messageCount > 0 ? t('group.chatCount', { count: task.chat.messageCount }) : t('group.chat')} />
+          )}
+          {task.isOwner && task.status === 'Overdue' && !compact && (
             <Button compact variant="secondary" title={t('card.freeze')} icon="snow-outline" loading={action.isPending} onPress={() => run('freeze')} />
           )}
-          {active && !compact && (
+          {task.isOwner && active && !compact && (
             <Button compact variant="secondary" title={t('card.edit')} icon="create-outline" onPress={() => router.push(`/task/${task.id}`)} />
           )}
-          {active && !compact && (
+          {task.isOwner && active && !compact && (
             <Button compact variant="ghost" title={t('card.cancel')} onPress={() => run('cancel')} />
           )}
-          {!compact && <Button compact variant="ghost" title={t('common.delete')} icon="trash-outline" onPress={() => run('delete')} />}
+          {task.isOwner && !compact && <Button compact variant="ghost" title={t('common.delete')} icon="trash-outline" onPress={() => run('delete')} />}
         </View>
       )}
     </View>
@@ -106,6 +144,7 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 16, fontWeight: '700' },
   done: { color: colors.muted, textDecorationLine: 'line-through' },
   meta: { color: colors.muted, fontSize: 13 },
+  invite: { color: colors.cyan, fontSize: 13.5, fontWeight: '700' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });
