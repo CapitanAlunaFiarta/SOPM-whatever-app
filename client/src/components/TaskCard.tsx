@@ -8,7 +8,7 @@ import { confirmAction, showMessage } from '@/lib/dialogs';
 import { useCompleteTask, useTaskAction } from '@/lib/queries';
 import type { Task } from '@/lib/types';
 
-import { CATEGORY_ICONS } from './categories';
+import { CATEGORY_ICONS, isCategory } from './categories';
 import { colors, radius, type Tone } from './theme';
 import { Badge, Button } from './ui';
 
@@ -61,7 +61,7 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[styles.title, task.status === 'Completed' && styles.done]} numberOfLines={2}>{task.title}</Text>
           <Text style={styles.meta}>
-            {t(`categoryShort.${task.category}`)} · {formatDate(task.dueDate)} · {t(`priority.${task.priority}`)}
+            {isCategory(task.category) ? t(`categoryShort.${task.category}`) : task.category} · {formatDate(task.dueDate)} · {t(`priority.${task.priority}`)}
           </Text>
         </View>
         <Badge text={task.completedToday ? t('card.doneToday') : t(`status.${task.status}`)}
