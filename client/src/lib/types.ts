@@ -152,3 +152,55 @@ export type Coordinates = { latitude: number; longitude: number };
 
 /** Centrul Brașovului, folosit când nu avem încă locația utilizatorului. */
 export const DEFAULT_COORDS: Coordinates = { latitude: 45.6525, longitude: 25.5888 };
+
+export type FavorStatus = 'REQUESTED' | 'ACCEPTED' | 'DECLINED' | 'REFUSED' | 'SUBMITTED' | 'COMPLETED' | 'EXPIRED' | 'CANCELED';
+export const OPEN_FAVOR_STATUSES: readonly FavorStatus[] = ['REQUESTED', 'ACCEPTED', 'SUBMITTED'];
+
+/** Un favor cerut unui prieten (role = REQUESTER) sau cerut mie (role = DOER). */
+export type Favor = {
+  id: number;
+  role: 'REQUESTER' | 'DOER';
+  friend: { username: string; fullName: string };
+  title: string;
+  details: string;
+  category: Category;
+  dueDate: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  status: FavorStatus;
+  /** La cerere, cel rugat datora deja un favor: poate refuza doar ca „nerezonabil”. */
+  obligated: boolean;
+  hasPhoto: boolean;
+  reviewNote: string | null;
+  createdAt: string;
+  submittedAt: string | null;
+  completedAt: string | null;
+  photoTakenAt: string | null;
+};
+
+/** Balanța cu un prieten: cine îi datorează cui un favor („pasă ca la tenis”). */
+export type FavorBalance = {
+  username: string;
+  fullName: string;
+  balance: 'EVEN' | 'I_OWE' | 'THEY_OWE';
+  openFavorId: number | null;
+};
+
+export type FavorList = { favors: Favor[]; balances: FavorBalance[] };
+
+export type FavorInput = {
+  friend: string;
+  title: string;
+  details: string;
+  category: Category;
+  dueDate: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+};
+
+/** Favorurile la care trebuie să fac eu ceva: să răspund, să fac poza sau să aprob poza. */
+export const favorNeedsMe = (favor: Favor) =>
+  (favor.role === 'DOER' && (favor.status === 'REQUESTED' || favor.status === 'ACCEPTED'))
+  || (favor.role === 'REQUESTER' && favor.status === 'SUBMITTED');

@@ -49,8 +49,12 @@ jobs:
       - name: Build APK (release)
         working-directory: client/android
         run: |
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a \
-            > /tmp/apk-gradle.log 2>&1 || (grep -E "FAILURE|What went wrong|error:|e: " -A6 /tmp/apk-gradle.log | head -80; tail -60 /tmp/apk-gradle.log; exit 1)
+          build() { ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a > /tmp/apk-gradle.log 2>&1; }
+          # Maven Central și Google Maven mai răspund cu 429/5xx (prea multe cereri din runner-ele GitHub):
+          # doar atunci mai încercăm o dată, după o pauză. O eroare de compilare pică imediat.
+          network='status code (429|5[0-9][0-9])|Read timed out|Connection reset|Connect timed out'
+          build || { grep -qE "$network" /tmp/apk-gradle.log && echo "::warning title=APK::Eroare de rețea la dependențe, reîncerc" && sleep 90 && build; } \
+            || (grep -E "FAILURE|What went wrong|error:|e: " -A6 /tmp/apk-gradle.log | head -80; tail -60 /tmp/apk-gradle.log; exit 1)
       - name: APK
         run: |
           mkdir -p /tmp/apk

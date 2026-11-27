@@ -217,21 +217,30 @@ public class TaskService {
                 TaskRules.storedCategory(task.get("category")));
         settle(id);
 
-        Map<String, Object> account = lockUser(user.email());
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("task", find(id, user));
+        response.putAll(credit(user.email(), today));
+        return response;
+    }
+
+    /**
+     * După o finalizare (activitate sau favor): streak-ul crește dacă ieri a fost o zi activă, se adaugă un
+     * punct, iar freeze-urile se reîncarcă la începutul lunii. Întoarce streak, points și freezesLeft.
+     */
+    Map<String, Integer> credit(String email, LocalDate today) {
+        Map<String, Object> account = lockUser(email);
         int streak = TaskRules.nextStreak(intValue(account.get("streak")), localDate(account.get("last_streak_date")), today);
         int freezes = TaskRules.availableFreezes(intValue(account.get("streak_freezes_left")),
                 localDate(account.get("freeze_month")), today);
         int points = intValue(account.get("points")) + 1;
         db.update("UPDATE users SET streak = ?, last_streak_date = ?, points = ?, streak_freezes_left = ?, freeze_month = ? "
                         + "WHERE email = ?",
-                streak, Date.valueOf(today), points, freezes, Date.valueOf(today.withDayOfMonth(1)), user.email());
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("task", find(id, user));
-        response.put("streak", streak);
-        response.put("points", points);
-        response.put("freezesLeft", freezes);
-        return response;
+                streak, Date.valueOf(today), points, freezes, Date.valueOf(today.withDayOfMonth(1)), email);
+        Map<String, Integer> result = new LinkedHashMap<>();
+        result.put("streak", streak);
+        result.put("points", points);
+        result.put("freezesLeft", freezes);
+        return result;
     }
 
     /** Mesajele din chatul activității (ultimele 200), pentru membri. */

@@ -92,6 +92,8 @@ function RootNavigator() {
           <Stack.Screen name="task/[id]" options={{ ...modalOptions, title: t('task.editTitle') }} />
           <Stack.Screen name="recap" options={{ ...modalOptions, title: t('recap.title') }} />
           <Stack.Screen name="chat/[id]" options={{ ...modalOptions, title: t('group.chatTitle') }} />
+          <Stack.Screen name="favor/new" options={{ ...modalOptions, title: t('favor.newTitle') }} />
+          <Stack.Screen name="favor/[id]" options={{ ...modalOptions, title: t('favor.takePhoto') }} />
         </Stack.Protected>
         <Stack.Protected guard={authAvailable}>
           <Stack.Screen name="login" />

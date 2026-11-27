@@ -26,7 +26,13 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
   - Fiecare invitat acceptă sau refuză. Cine acceptă devine membru, își confirmă singur partea (cu aceleași verificări de locație și biometrie) și primește streak și puncte.
   - O activitate unică se încheie când au confirmat toți membrii și nu mai așteaptă nicio invitație; una zilnică trece pe mâine când au confirmat toți în ziua respectivă.
   - Chatul activității (separat de cel general) se deschide la prima acceptare și devine doar de citit la 5 zile după încheiere sau anulare.
-- Emailurile altor utilizatori nu sunt expuse niciodată (prieteni, clasament, activități de grup, chat).
+- **Favoruri** („pasă ca la tenis”): îi poți cere unui prieten un favor (ce, până când, unde se face poza).
+  - Primul favor dintre voi poate fi refuzat liber. După ce un favor e făcut, cel care l-a primit îi datorează unul celuilalt.
+  - Cât timp datorezi, nu poți cere. Când ți se cere și datorezi, poți refuza doar ca „nerezonabil”: datoria rămâne, iar prietenul poate cere altceva.
+  - Între doi prieteni poate exista un singur favor în desfășurare. Cele neterminate până la scadență se anulează singure.
+  - Confirmarea se face doar cu camera din aplicație (fără galerie). Serverul verifică momentul pozei, locul (raza) și că e JPEG, iar cel care a cerut aprobă sau respinge poza.
+  - La aprobare, cel care a făcut favorul primește streak, un punct și intrare în recap.
+- Emailurile altor utilizatori nu sunt expuse niciodată (prieteni, clasament, activități de grup, chat, favoruri).
 - **Categorii**: `SPORT` (activitate fizică), `STUDY` (facultate/studiu), `CHORES` (treburi, comisioane — implicită), `ENTERTAINMENT`.
   Serverul păstrează cheile, aplicația afișează numele traduse. Valorile vechi sunt acceptate și mapate
   (Sport/Sănătate → SPORT, Facultate/Proiect Echipă → STUDY, restul → CHORES; migrarea `003`).

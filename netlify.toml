@@ -13,7 +13,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Frame-Options = "DENY"
-    Permissions-Policy = "geolocation=(self), publickey-credentials-get=(self), publickey-credentials-create=(self)"
+    Permissions-Policy = "geolocation=(self), camera=(self), publickey-credentials-get=(self), publickey-credentials-create=(self)"
 
 # Fișierele generate de Expo au hash în nume, deci pot fi păstrate în cache oricât.
 [[headers]]

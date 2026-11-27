@@ -92,6 +92,9 @@ export function Button({ title, onPress, variant = 'primary', icon, loading, dis
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
+      // `disabled` pune și aria-disabled pe web (react-native-web nu traduce accessibilityState),
+      // deci cititoarele de ecran și testele văd că butonul nu se poate apăsa încă.
+      disabled={inactive}
       accessibilityState={{ disabled: inactive }}
       onPress={inactive ? undefined : onPress}
       style={({ pressed }) => [
@@ -227,15 +230,18 @@ export function EmptyState({ icon, title, text }: { icon: IconName; title: strin
 export function Segmented<T extends string>({ options, value, onChange }: {
   options: { value: T; label: string; icon?: IconName }[]; value: T; onChange: (value: T) => void;
 }) {
+  // De la 4 opțiuni în sus, iconița trece deasupra textului, ca etichetele să încapă pe telefon.
+  const stacked = options.length >= 4;
   return (
     <View style={styles.segmented}>
       {options.map((option) => {
         const selected = option.value === value;
         return (
           <Pressable key={option.value} onPress={() => onChange(option.value)} accessibilityRole="tab"
-            accessibilityState={{ selected }} style={[styles.segment, selected && styles.segmentSelected]}>
+            accessibilityState={{ selected }} style={[styles.segment, stacked && styles.segmentStacked, selected && styles.segmentSelected]}>
             {option.icon ? <Ionicons name={option.icon} size={15} color={selected ? '#fff' : colors.muted} /> : null}
-            <Text style={[styles.segmentText, selected && { color: '#fff' }]}>{option.label}</Text>
+            <Text style={[styles.segmentText, stacked && styles.segmentTextStacked, selected && { color: '#fff' }]}
+              numberOfLines={1}>{option.label}</Text>
           </Pressable>
         );
       })}
@@ -326,6 +332,8 @@ const styles = StyleSheet.create({
   segmented: { flexDirection: 'row', backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, padding: 4, gap: 4 },
   segment: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: radius.sm },
   segmentSelected: { backgroundColor: colors.indigo },
+  segmentStacked: { flexDirection: 'column', gap: 2, paddingVertical: 7, paddingHorizontal: 2 },
+  segmentTextStacked: { fontSize: 12 },
   segmentText: { color: colors.muted, fontWeight: '800', fontSize: 13.5 },
   stat: { flexGrow: 1, flexBasis: 140, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: 14, gap: 4 },
   statValue: { fontSize: 28, fontWeight: '900' },

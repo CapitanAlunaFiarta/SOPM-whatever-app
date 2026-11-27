@@ -7,7 +7,8 @@ import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
 import type {
-  AdminUser, ChatMessage, CompletionResult, Friend, LeaderboardEntry, Recap, Session, Task, TaskInput, TaskMessage, User,
+  AdminUser, ChatMessage, CompletionResult, Favor, FavorInput, FavorList, Friend, LeaderboardEntry, Recap, Session, Task,
+  TaskInput, TaskMessage, User,
 } from './types';
 
 export const keys = {
@@ -19,6 +20,8 @@ export const keys = {
   adminUsers: ['admin-users'] as const,
   recap: ['recap'] as const,
   taskMessages: (id: number) => ['task-messages', id] as const,
+  favors: ['favors'] as const,
+  favorPhoto: (id: number) => ['favor-photo', id] as const,
 };
 
 export function useMe() {
@@ -166,6 +169,63 @@ export function useSendTaskMessage(id: number) {
       client.invalidateQueries({ queryKey: keys.taskMessages(id) }),
       client.invalidateQueries({ queryKey: keys.tasks }),
     ]),
+  });
+}
+
+/** Favorurile mele și balanța cu fiecare prieten; se reîmprospătează des, ca să vezi răspunsurile. */
+export function useFavors() {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.favors,
+    enabled: status === 'signedIn',
+    refetchInterval: 20_000,
+    queryFn: () => request<FavorList>('task', '/favors'),
+  });
+}
+
+export function useRequestFavor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FavorInput) => request<Favor>('task', '/favors', { method: 'POST', body: input }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.favors }),
+  });
+}
+
+export type FavorAction = 'accept' | 'decline' | 'refuse' | 'cancel' | 'approve' | 'reject';
+
+export function useFavorAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ favor, action, note }: { favor: Favor; action: FavorAction; note?: string }) =>
+      request<Favor>('task', `/favors/${favor.id}/${action}`, { method: 'POST', body: action === 'reject' ? { note } : undefined }),
+    // Aprobarea dă puncte celui care a făcut favorul și schimbă balanța.
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.favors }),
+      client.invalidateQueries({ queryKey: keys.leaderboard }),
+    ]),
+  });
+}
+
+/** Poza făcută cu camera din aplicație (JPEG în base64), cu locația și momentul în care a fost făcută. */
+export function useSubmitFavorPhoto() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: number; photo: string; latitude: number; longitude: number; accuracy?: number; mocked?: boolean; takenAt: string;
+    }) => request<Favor>('task', `/favors/${id}/photo`, { method: 'POST', body }),
+    onSuccess: (favor) => Promise.all([
+      client.invalidateQueries({ queryKey: keys.favors }),
+      client.invalidateQueries({ queryKey: keys.favorPhoto(favor.id) }),
+    ]),
+  });
+}
+
+export function useFavorPhoto(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.favorPhoto(id),
+    enabled,
+    staleTime: 60_000,
+    queryFn: () => request<{ dataUrl: string }>('task', `/favors/${id}/photo`),
   });
 }
 

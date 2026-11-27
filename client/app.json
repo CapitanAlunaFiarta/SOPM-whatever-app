@@ -2,7 +2,7 @@
   "expo": {
     "name": "Whatever",
     "slug": "whatever-app",
-    "version": "2.1.0",
+    "version": "2.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "whatever",
@@ -26,7 +26,8 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "USE_BIOMETRIC"
+        "USE_BIOMETRIC",
+        "CAMERA"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -67,6 +68,14 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Whatever verifică locația doar când confirmi o activitate legată de un loc."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Whatever folosește camera doar ca să confirmi un favor cu o poză făcută la locul stabilit.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
         }
       ]
     ],

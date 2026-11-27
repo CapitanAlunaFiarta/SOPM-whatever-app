@@ -1,6 +1,7 @@
 // Test end-to-end al aplicației web (client/) într-un Chrome real, pe backend-ul pornit local în CI.
 // Acoperă: cont nou, activități (simplă, cu passkey, cu locație), streak/puncte, cercul de progres,
-// recap-ul lunar pe categorii, activitate cu un prieten (invitație + chatul ei), chat, deconectare, rute protejate, schimbarea limbii (inclusiv mesajele
+// recap-ul lunar pe categorii, activitate cu un prieten (invitație + chatul ei), favor confirmat cu poză
+// făcută cu camera live (cameră falsă a lui Chrome) la locație, chat, deconectare, rute protejate, schimbarea limbii (inclusiv mesajele
 // traduse de server), resetare parolă prin cod, panoul de admin.
 // Variabile: UI_URL (implicit http://localhost:5173), CHROME_PATH, USER_LOG (log-ul user-service,
 // pentru codul de resetare când MAIL_PROVIDER=log), ADMIN_EMAIL, ADMIN_PASSWORD, USER_API, TASK_API
@@ -23,6 +24,7 @@ const me = {
 };
 const BRASOV = { latitude: 45.6427, longitude: 25.5887, accuracy: 8 };
 const BUCURESTI = { latitude: 44.4268, longitude: 26.1025, accuracy: 8 };
+const tomorrow = new Date(Date.now() + 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Bucharest' });
 
 let failures = 0;
 let passed = 0;
@@ -30,13 +32,25 @@ const dialogs = [];
 const pageErrors = [];
 const consoleErrors = [];
 
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
+// Camera: Chrome dă un flux video de test, fără să ceară voie (pentru poza favorului).
+const browser = await chromium.launch({
+  executablePath: CHROME,
+  args: ['--no-sandbox', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+});
 const context = await browser.newContext({
   viewport: { width: 390, height: 844 },
   locale: 'ro-RO',
   timezoneId: 'Europe/Bucharest',
   geolocation: BRASOV,
-  permissions: ['geolocation'],
+  permissions: ['geolocation', 'camera'],
+});
+// Camera pornește greu, ca pe un telefon mai vechi: „Fă poza” trebuie să rămână inactiv până e gata
+// (altfel apăsarea se pierde). Fără întârzierea asta, camera falsă a lui Chrome pornește instant.
+await context.addInitScript(() => {
+  const media = navigator.mediaDevices;
+  if (!media?.getUserMedia) return;
+  const original = media.getUserMedia.bind(media);
+  media.getUserMedia = (constraints) => new Promise((resolve) => setTimeout(resolve, 2000)).then(() => original(constraints));
 });
 const page = await context.newPage();
 page.setDefaultTimeout(25_000);
@@ -86,6 +100,8 @@ async function step(name, fn) {
     const text = await pageText();
     console.log(`✗ FAIL ${name}: ${first}\n   URL: ${page.url()}\n   Pagina: ${text}`);
     annotate('error', `UI: ${name}`, `${first}\nURL: ${page.url()}\nPagina: ${text}`);
+    // Un pas picat nu trebuie să-i tragă după el pe următorii: reluăm de la pagina principală.
+    await page.goto(BASE).catch(() => undefined);
     return false;
   }
 }
@@ -291,6 +307,38 @@ if (ok) {
     if (general.some((message) => message.text === 'Perfect, vin și eu!')) throw new Error('Mesajul a ajuns în chatul general');
     await button('Închide').click();
     await waitPath('/tasks');
+  });
+
+  await step('favor: prietenul cere, faci poza cu camera live la locație, el aprobă', async () => {
+    const friend = {
+      fullName: 'Cip Vecin', username: `cip_${run}`, email: `cip_${run}@ci.local`, password: 'parola-cip-foarte-sigura-1',
+    };
+    const { token } = await api('user', '/users/register', { body: friend });
+    await api('user', '/friends', { token, body: { username: me.username } });
+    const favor = await api('task', '/favors', { token, body: {
+      friend: me.username, title: 'Ridică-mi coletul', details: 'E pe numele meu.', category: 'CHORES', dueDate: tomorrow,
+      latitude: BRASOV.latitude, longitude: BRASOV.longitude, radius: 150,
+    } });
+    await page.goto(BASE);
+    await seen('Un favor așteaptă după tine');
+    await button('Vezi favorurile').click();
+    await waitPath('/social');
+    await visible(page.locator('div').filter({ hasText: 'Ridică-mi coletul' }).filter({ has: button('Accept') })).last()
+      .getByRole('button', { name: 'Accept', exact: true }).click();
+    await button('Fă poza la locație').click();
+    await waitPath(`/favor/${favor.id}`);
+    await button('Fă poza').click();
+    const from = dialogs.length;
+    await button('Trimite poza').click();
+    await expectDialog(from, /Poza a fost trimisă spre aprobare/);
+    const photo = await api('task', `/favors/${favor.id}/photo`, { token });
+    if (!/^data:image\/jpeg;base64,\/9j\//.test(photo.dataUrl)) throw new Error('Prietenul nu primește un JPEG');
+    await api('task', `/favors/${favor.id}/approve`, { token, body: {} });
+    await page.reload();
+    await seen('Îți datorează un favor');
+    await seen('Făcut');
+    await page.goto(BASE);
+    await waitPath('/');
   });
 
   await step('chat: mesajul apare în listă', async () => {

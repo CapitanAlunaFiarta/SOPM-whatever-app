@@ -1,6 +1,8 @@
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { FavorsSection } from '@/components/FavorsSection';
 import { colors } from '@/components/theme';
 import {
   AppText, Badge, Banner, Button, Card, EmptyState, IconButton, Row, Screen, Segmented, TextField,
@@ -13,20 +15,33 @@ import {
   useChat, useDeleteChat, useFriendAction, useFriends, useLeaderboard, useSendChat,
 } from '@/lib/queries';
 
-type Section = 'chat' | 'friends' | 'leaderboard';
+const SECTIONS = ['chat', 'friends', 'favors', 'leaderboard'] as const;
+type Section = (typeof SECTIONS)[number];
+const isSection = (value: unknown): value is Section => SECTIONS.includes(value as Section);
 
 export default function SocialScreen() {
   const { t } = useI18n();
-  const [section, setSection] = useState<Section>('chat');
+  // Acasă poate deschide direct o secțiune: /social?section=favors.
+  const params = useLocalSearchParams<{ section?: string }>();
+  const [section, setSection] = useState<Section>(isSection(params.section) ? params.section : 'chat');
+  // Dacă se ajunge din nou aici cu altă secțiune în adresă, o deschidem (ajustare în timpul randării,
+  // fără efect: https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes).
+  const [requested, setRequested] = useState(params.section);
+  if (params.section !== requested) {
+    setRequested(params.section);
+    if (isSection(params.section)) setSection(params.section);
+  }
   return (
     <Screen title={t('social.title')} subtitle={t('social.subtitle')}>
       <Segmented value={section} onChange={setSection} options={[
         { value: 'chat', label: t('social.chat'), icon: 'chatbubbles-outline' },
         { value: 'friends', label: t('social.friends'), icon: 'people-outline' },
+        { value: 'favors', label: t('social.favors'), icon: 'hand-left-outline' },
         { value: 'leaderboard', label: t('social.leaderboard'), icon: 'trophy-outline' },
       ]} />
       {section === 'chat' && <ChatSection />}
       {section === 'friends' && <FriendsSection />}
+      {section === 'favors' && <FavorsSection />}
       {section === 'leaderboard' && <LeaderboardSection />}
     </Screen>
   );
