@@ -328,6 +328,8 @@ export const ro = {
   'focus.successText': '{minutes} min fără aplicațiile care te distrag.',
   'focus.otherSession': 'Ai deja o sesiune pornită pentru „{title}”.',
   'focus.openOther': 'Deschide sesiunea',
+  'focus.unavailableTitle': 'Doar în aplicația de Android',
+  'focus.unavailableText': 'Sesiunile de focus citesc istoricul de utilizare al telefonului, iar asta poate doar aplicația de Android (APK-ul).',
   'focus.progressLabel': 'Timp rămas: {time}',
 
   // Hartă

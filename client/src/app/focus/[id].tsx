@@ -3,13 +3,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { ProgressRing } from '@/components/ProgressRing';
-import { AppText, Banner, Button, Card, ChipGroup, Loading, MultiChipGroup, Row, Screen, TextField } from '@/components/ui';
+import {
+  AppText, Banner, Button, Card, ChipGroup, EmptyState, Loading, MultiChipGroup, Row, Screen, TextField,
+} from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { confirmAction, showMessage } from '@/lib/dialogs';
 import {
-  clearSession, currentSession, hasUsageAccess, launchableApps, openedApps, openUsageAccessSettings, saveApps, savedApps,
-  saveSession,
+  clearSession, currentSession, focusAvailable, hasUsageAccess, launchableApps, openedApps, openUsageAccessSettings, saveApps,
+  savedApps, saveSession,
 } from '@/lib/focus';
 import {
   FOCUS_DURATIONS, focusOutcome, formatRemaining, newSession, type FocusApp, type FocusSession,
@@ -18,6 +20,7 @@ import { useCompleteTask, useTasks } from '@/lib/queries';
 
 type Phase =
   | { kind: 'loading' }
+  | { kind: 'unsupported' }
   | { kind: 'access' }
   | { kind: 'setup' }
   | { kind: 'other'; session: FocusSession }
@@ -79,6 +82,10 @@ export default function FocusScreen() {
 
   /** Starea de pornire: o sesiune deja începută, lipsa accesului sau alegerea aplicațiilor. */
   const resume = useCallback(async (session: FocusSession | null) => {
+    if (!focusAvailable) {
+      show({ kind: 'unsupported' });
+      return;
+    }
     if (session && session.taskId !== taskId) {
       show({ kind: 'other', session });
       return;
@@ -173,6 +180,10 @@ export default function FocusScreen() {
       {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
 
       {phase.kind === 'loading' && <Card style={{ height: 200 }}><Loading /></Card>}
+
+      {phase.kind === 'unsupported' && (
+        <Card><EmptyState icon="leaf-outline" title={t('focus.unavailableTitle')} text={t('focus.unavailableText')} /></Card>
+      )}
 
       {phase.kind === 'access' && (
         <Card>

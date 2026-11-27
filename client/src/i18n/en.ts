@@ -324,6 +324,8 @@ export const en: Dictionary = {
   'focus.successText': '{minutes} min without your distracting apps.',
   'focus.otherSession': 'You already have a session running for “{title}”.',
   'focus.openOther': 'Open session',
+  'focus.unavailableTitle': 'Android app only',
+  'focus.unavailableText': 'Focus sessions read the phone’s usage history, which only the Android app (the APK) can do.',
   'focus.progressLabel': 'Time left: {time}',
 
   // Map

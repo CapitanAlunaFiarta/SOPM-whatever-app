@@ -1,7 +1,9 @@
 # Whatever
 
 Task manager gamificat: activități cu scadență, verificare în locație (GPS) și cu biometrie,
-streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de administrare.
+streak zilnic, freeze-uri lunare, prieteni, activități de grup cu chat propriu, favoruri confirmate cu poză,
+recap lunar pe categorii, sesiuni de focus (Android), clasament, chat global și panou de administrare.
+Aplicația e în română, engleză și spaniolă.
 
 | Componentă | Tehnologie | Găzduire |
 |---|---|---|
@@ -38,6 +40,16 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
   (Sport/Sănătate → SPORT, Facultate/Proiect Echipă → STUDY, restul → CHORES; migrarea `003`).
 - **Recap lunar** (`GET /api/tasks/recap?month=YYYY-MM`): câte activități ai finalizat în fiecare categorie. Categoria se
   salvează la finalizare, deci recap-ul rămâne corect și după ștergerea activității.
+- **Cercul de progres** (Acasă): activitățile confirmate azi, din tot ce era de făcut azi (cele confirmate plus cele încă
+  deschise cu scadența azi sau mai devreme, inclusiv cele zilnice). Activitățile pentru zilele următoare nu intră în calcul.
+- **Focus** (doar în aplicația de Android, ca în Forest): pentru o activitate alegi durata (15, 25, 45 sau 60 de minute)
+  și aplicațiile care te distrag.
+  - Aplicațiile nu sunt blocate: dacă deschizi una dintre ele în timpul sesiunii, sesiunea pică (afișează ce aplicație și după câte minute).
+  - Whatever citește istoricul de utilizare al telefonului (permisiunea „Acces la datele de utilizare”, dată o singură dată
+    din Setări), deci verificarea merge și dacă aplicația a fost închisă între timp. Datele nu pleacă de pe telefon.
+  - La final, o activitate fără locație sau biometrie se confirmă singură; celelalte se confirmă cu un buton, cu verificările obișnuite.
+  - Pe iOS ar fi nevoie de API-ul Screen Time (Family Controls), pentru care Apple cere o aprobare specială, iar un browser nu
+    poate vedea alte aplicații. De aceea butonul Focus apare doar în APK-ul de Android (nici în Expo Go).
 - **Limbi**: română, engleză, spaniolă. Aplicația pornește în limba telefonului/browserului (altfel engleză) și ține minte
   alegerea din Profil sau de pe ecranele de autentificare. Trimite `Accept-Language`, iar serverele traduc mesajele de eroare
   (`i18n/messages.tsv` din fiecare serviciu) și emailul de resetare a parolei.
@@ -110,6 +122,10 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
   - **Hărțile nu au nevoie de chei API**: pe Android harta este Leaflet + OpenStreetMap într-un WebView
     (`src/components/leaflet/`), pe iOS Apple Maps (`*.ios.tsx`), iar pe web Leaflet (`*.web.tsx`).
     `react-native-maps` e exclus din build-ul Android (`client/react-native.config.js`).
+  - **Focus** folosește un modul nativ local, `client/modules/focus-guard` (Kotlin, Expo Modules API), inclus automat
+    în APK: verifică permisiunea `PACKAGE_USAGE_STATS`, deschide setarea ei, listează aplicațiile din launcher și citește
+    din `UsageStatsManager` ce aplicații au venit în prim-plan. Pe iOS și web modulul lipsește, iar aplicația ascunde funcția.
+  - **Camera** (poza pentru favoruri) cere permisiunea `CAMERA`, fără microfon și fără scanner de coduri (pluginul `expo-camera` din `app.json`).
 - **EAS Build** (opțional, în cloud; necesar pentru iOS și Google Play):
   1. Cont gratuit pe expo.dev, apoi în `client/`: `npx eas-cli@latest login` și `npx eas-cli@latest init`.
      Pune ID-ul proiectului afișat în `app.json` la `expo.extra.eas.projectId`.
@@ -123,11 +139,15 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 
 `.github/workflows/ci.yml` rulează la fiecare push:
 - **Backend**: `mvn verify` pentru ambele servicii, migrațiile pe un Postgres real și `e2e/api-smoke.mjs` — teste end-to-end
-  pentru sesiuni, finalizări, streak, biometrie, locație, prieteni, freeze, admin, resetare parolă, CORS și rate limiting.
+  pentru sesiuni, finalizări, streak, biometrie, locație, prieteni, freeze, admin, resetare parolă, CORS și rate limiting,
+  plus traducerea erorilor, categorii și recap, activități de grup cu chat și favoruri (datorii, refuz „nerezonabil”, poză, aprobare).
 - **Docker**: construiește imaginile ca pe Render și măsoară pornirea cu limitele planului gratuit.
 - **Teste UI** (`e2e/ui/ui-smoke.mjs`): aplicația web, construită pentru backend-ul pornit în CI, rulează într-un Chrome
   headless cu un passkey virtual: cont nou, activități simple / cu passkey / cu locație (inclusiv refuz de departe),
-  streak și puncte, chat, deconectare, rute protejate, resetare parolă cu codul din email, panoul de admin.
+  streak și puncte, cercul de progres, recap-ul lunar, o activitate cu un prieten și chatul ei, un favor confirmat cu poza
+  făcută de camera falsă a lui Chrome (pornită cu întârziere, ca pe un telefon lent), chat, deconectare, rute protejate,
+  schimbarea limbii, resetare parolă cu codul din email, panoul de admin.
 - **Aplicația Expo**: TypeScript, ESLint, teste jest (inclusiv compatibilitatea semnăturii Ed25519 a telefonului cu
   verificarea din user-service), build-ul web pentru Netlify și bundle-urile JavaScript pentru Android și iOS.
-- **Android APK** (`android.yml`): build-ul nativ complet, la fiecare schimbare în `client/`.
+- **Android APK** (`android.yml`): build-ul nativ complet (inclusiv modulul Kotlin pentru focus), la fiecare schimbare
+  în `client/`. Dacă Maven Central sau Google Maven răspund cu 429/5xx, build-ul se reîncearcă o dată după 90 s.
