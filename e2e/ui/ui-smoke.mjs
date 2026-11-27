@@ -44,6 +44,14 @@ const context = await browser.newContext({
   geolocation: BRASOV,
   permissions: ['geolocation', 'camera'],
 });
+// Camera pornește greu, ca pe un telefon mai vechi: „Fă poza” trebuie să rămână inactiv până e gata
+// (altfel apăsarea se pierde). Fără întârzierea asta, camera falsă a lui Chrome pornește instant.
+await context.addInitScript(() => {
+  const media = navigator.mediaDevices;
+  if (!media?.getUserMedia) return;
+  const original = media.getUserMedia.bind(media);
+  media.getUserMedia = (constraints) => new Promise((resolve) => setTimeout(resolve, 2000)).then(() => original(constraints));
+});
 const page = await context.newPage();
 page.setDefaultTimeout(25_000);
 page.on('dialog', (dialog) => {
@@ -92,6 +100,8 @@ async function step(name, fn) {
     const text = await pageText();
     console.log(`✗ FAIL ${name}: ${first}\n   URL: ${page.url()}\n   Pagina: ${text}`);
     annotate('error', `UI: ${name}`, `${first}\nURL: ${page.url()}\nPagina: ${text}`);
+    // Un pas picat nu trebuie să-i tragă după el pe următorii: reluăm de la pagina principală.
+    await page.goto(BASE).catch(() => undefined);
     return false;
   }
 }

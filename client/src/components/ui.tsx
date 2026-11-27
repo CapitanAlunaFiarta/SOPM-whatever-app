@@ -92,6 +92,9 @@ export function Button({ title, onPress, variant = 'primary', icon, loading, dis
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
+      // `disabled` pune și aria-disabled pe web (react-native-web nu traduce accessibilityState),
+      // deci cititoarele de ecran și testele văd că butonul nu se poate apăsa încă.
+      disabled={inactive}
       accessibilityState={{ disabled: inactive }}
       onPress={inactive ? undefined : onPress}
       style={({ pressed }) => [

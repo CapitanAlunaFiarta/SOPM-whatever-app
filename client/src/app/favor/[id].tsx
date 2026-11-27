@@ -52,7 +52,8 @@ export default function FavorPhotoScreen() {
     try {
       const takenAt = new Date().toISOString();
       const [picture, position] = await Promise.all([
-        camera.current.takePictureAsync({ quality: 0.85, shutterSound: false }),
+        // imageType contează doar pe web (implicit e PNG, mare și lent de recodat).
+        camera.current.takePictureAsync({ quality: 0.85, shutterSound: false, imageType: 'jpg' }),
         currentPosition(),
       ]);
       const context = ImageManipulator.manipulate(picture.uri);
