@@ -3,6 +3,9 @@ services:
     name: whatever-user-service
     runtime: docker
     plan: free
+    # Regiunea se alege doar la crearea serviciului. Pentru servicii noi folosește Frankfurt
+    # (aproape de Supabase eu-west-1 și de utilizatorii din România):
+    # region: frankfurt
     rootDir: backend/user-service
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
@@ -37,11 +40,25 @@ services:
         value: whatever-app-unitbv.me
       - key: WEBAUTHN_ORIGIN
         value: https://whatever-app-unitbv.me,https://www.whatever-app-unitbv.me
+      # Email prin API HTTPS (Render free blochează SMTP): brevo sau resend
+      - key: MAIL_PROVIDER
+        sync: false
+      - key: MAIL_API_KEY
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Whatever
+      - key: APP_TIMEZONE
+        value: Europe/Bucharest
+      - key: CORS_ORIGIN_PATTERNS
+        value: https://*--whatever-unitbv.netlify.app
+      - key: JWT_REFRESH_DAYS
+        value: "30"
 
   - type: web
     name: whatever-task-service
     runtime: docker
     plan: free
+    # region: frankfurt
     rootDir: backend/task-service
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/tasks/health
@@ -56,3 +73,7 @@ services:
         sync: false
       - key: CORS_ORIGIN
         value: https://whatever-app-unitbv.me,https://www.whatever-app-unitbv.me
+      - key: APP_TIMEZONE
+        value: Europe/Bucharest
+      - key: CORS_ORIGIN_PATTERNS
+        value: https://*--whatever-unitbv.netlify.app

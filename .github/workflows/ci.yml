@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DB_URL: jdbc:postgresql://localhost:5432/whatever_db
+  DB_USER: whatever_app
+  DB_PASSWORD: whatever_ci_password
+  PGPASSWORD: whatever_ci_password
+  JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret-0123456789
+  ADMIN_EMAIL: admin@ci.local
+  ADMIN_PASSWORD: ci-admin-password-123
+  MAIL_PROVIDER: log
+  PUBLIC_URL: http://localhost:5173
+
+jobs:
+  backend:
+    name: Backend (build + teste API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: whatever_db
+          POSTGRES_USER: whatever_app
+          POSTGRES_PASSWORD: whatever_ci_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U whatever_app -d whatever_db"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Migrații SQL
+        run: |
+          for f in database/migrations/*.sql; do
+            echo "== $f" | tee -a /tmp/migrations.log
+            psql -h localhost -U whatever_app -d whatever_db -v ON_ERROR_STOP=1 -q -f "$f" >> /tmp/migrations.log 2>&1
+          done
+      - name: user-service (mvn verify)
+        run: mvn -B -ntp -f backend/user-service/pom.xml verify > /tmp/user-build.log 2>&1 || (tail -80 /tmp/user-build.log; exit 1)
+      - name: task-service (mvn verify)
+        run: mvn -B -ntp -f backend/task-service/pom.xml verify > /tmp/task-build.log 2>&1 || (tail -80 /tmp/task-build.log; exit 1)
+      - name: Pornește serviciile
+        run: |
+          SERVER_PORT=8081 nohup java -jar backend/user-service/target/user-service-*.jar > /tmp/user.log 2>&1 &
+          SERVER_PORT=8082 nohup java -jar backend/task-service/target/task-service-*.jar > /tmp/task.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8081/api/health >/dev/null 2>&1 && curl -fsS http://localhost:8082/api/tasks/health >/dev/null 2>&1; then
+              echo "Servicii pornite după ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Serviciile nu au pornit"; tail -60 /tmp/user.log /tmp/task.log; exit 1
+      - name: Teste API end-to-end
+        run: USER_LOG=/tmp/user.log node e2e/api-smoke.mjs 2>&1 | tee /tmp/e2e.log
+      - name: Adnotări erori
+        if: failure()
+        run: bash .github/scripts/annotate.sh backend /tmp/migrations.log /tmp/user-build.log /tmp/task-build.log /tmp/e2e.log /tmp/user.log /tmp/task.log
+
+  docker:
+    name: Docker (ca pe Render free)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: whatever_db
+          POSTGRES_USER: whatever_app
+          POSTGRES_PASSWORD: whatever_ci_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U whatever_app -d whatever_db"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Migrații SQL
+        run: for f in database/migrations/*.sql; do psql -h localhost -U whatever_app -d whatever_db -v ON_ERROR_STOP=1 -q -f "$f"; done
+      - name: Build imagine user-service
+        run: docker build -t whatever-user backend/user-service > /tmp/docker-user.log 2>&1 || (tail -80 /tmp/docker-user.log; exit 1)
+      - name: Build imagine task-service
+        run: docker build -t whatever-task backend/task-service > /tmp/docker-task.log 2>&1 || (tail -80 /tmp/docker-task.log; exit 1)
+      - name: Pornire cu 0.1 CPU / 512 MB (limitele Render free)
+        run: |
+          set -u
+          start_and_measure() {
+            local name="$1" image="$2" port="$3" health="$4" main="$5" extra="$6"
+            docker run -d --name "$name" --network host --cpus 0.1 --memory 512m \
+              -e SERVER_PORT="$port" -e DB_URL -e DB_USER -e DB_PASSWORD -e JWT_SECRET \
+              -e ADMIN_EMAIL -e ADMIN_PASSWORD -e MAIL_PROVIDER $extra "$image" > /dev/null
+            for i in $(seq 1 300); do
+              if curl -fsS "http://localhost:${port}${health}" > /dev/null 2>&1; then break; fi
+              sleep 1
+            done
+            docker logs "$name" > "/tmp/${name}.log" 2>&1 || true
+            local started
+            started=$(grep -o "Started ${main} in [0-9.]* seconds" "/tmp/${name}.log" | head -1 || true)
+            echo "::notice title=${name}::${started:-nu a pornit în 300s}"
+            docker rm -f "$name" > /dev/null
+            [ -n "$started" ]
+          }
+          docker run --rm --entrypoint ls whatever-user -la /app/extracted | tee /tmp/docker-run.log
+          docker run --rm --entrypoint ls whatever-task -la /app/extracted | tee -a /tmp/docker-run.log
+          grep -q "app.jsa" /tmp/docker-run.log || echo "::warning title=CDS::Arhiva app.jsa lipsește dintr-o imagine"
+          start_and_measure user-cds whatever-user 8091 /api/health UserServiceApplication ""
+          start_and_measure user-fara-cds whatever-user 8093 /api/health UserServiceApplication "--entrypoint java whatever-user -Xshare:off -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -jar app.jar" || true
+          start_and_measure task-cds whatever-task 8092 /api/tasks/health TaskServiceApplication ""
+      - name: Adnotări erori
+        if: failure()
+        run: bash .github/scripts/annotate.sh docker /tmp/docker-user.log /tmp/docker-task.log /tmp/docker-run.log /tmp/user-cds.log /tmp/task-cds.log
+
+  web:
+    name: Web (Vite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web-app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-app/package-lock.json
+      - run: npm ci
+      - run: npm run build > /tmp/web-build.log 2>&1 || (cat /tmp/web-build.log; exit 1)
+      - name: Adnotări erori
+        if: failure()
+        working-directory: .
+        run: bash .github/scripts/annotate.sh web /tmp/web-build.log
