@@ -8,7 +8,7 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
 | `backend/user-service` | Spring Boot 3.5, Java 21 — conturi, sesiuni, email, passkey, biometrie, social, admin | Render (Docker) |
 | `backend/task-service` | Spring Boot 3.5, Java 21 — activități, streak, freeze, verificări | Render (Docker) |
 | `database/migrations` | PostgreSQL (SQL simplu, rulat în ordine) | Supabase |
-| `client` | Expo SDK 58: React Native + React Native Web, Expo Router — **un singur cod** pentru Android, iOS și web | Netlify (web, `whatever-app-unitbv.me`), EAS Build (Android/iOS) |
+| `client` | Expo SDK 58: React Native + React Native Web, Expo Router — **un singur cod** pentru Android, iOS și web | Netlify (web, `whatever-app-unitbv.me`), GitHub Releases (APK Android), EAS Build (opțional, Android/iOS) |
 
 ## Reguli de business
 
@@ -83,16 +83,25 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 - **Netlify** (site-ul web): base directory `client`, build `npx expo export -p web`, publish `dist` (în `netlify.toml`).
   Fiecare pull request primește un deploy preview. Adresele API sunt implicit cele de pe Render; se pot schimba cu
   `EXPO_PUBLIC_USER_API` și `EXPO_PUBLIC_TASK_API` (variabile de mediu în Netlify). Variabilele vechi `VITE_*` nu mai sunt folosite.
-- **Android și iOS** (EAS Build, în cloud, fără Android Studio/Xcode):
+- **Android (APK, automat)**: workflow-ul `.github/workflows/android.yml` construiește aplicația din `client/`
+  (`expo prebuild` + Gradle) la fiecare push pe `main` care atinge `client/` și o publică în GitHub Releases.
+  Ultima versiune se descarcă mereu de la
+  `https://github.com/CapitanAlunaFiarta/SOPM-whatever-app/releases/latest/download/whatever.apk`
+  (pe telefon: deschide linkul, apoi permite instalarea din browser). APK-ul e semnat cu cheia de debug din șablonul
+  Expo — potrivit pentru instalare directă, nu pentru Google Play.
+  - **Harta pe Android** folosește Google Maps și are nevoie de o cheie API (Google Cloud → Maps SDK for Android).
+    Pune-o ca secret de repository `GOOGLE_MAPS_API_KEY` (GitHub → Settings → Secrets and variables → Actions).
+    Fără cheie aplicația merge, dar ecranele cu hartă afișează un mesaj în locul hărții.
+- **EAS Build** (opțional, în cloud; necesar pentru iOS și Google Play):
   1. Cont gratuit pe expo.dev, apoi în `client/`: `npx eas-cli@latest login` și `npx eas-cli@latest init`.
      Pune ID-ul proiectului afișat în `app.json` la `expo.extra.eas.projectId`.
-  2. **Android (APK de instalat direct)**: `npm run build:android` (profilul `preview`). La final primești un link/QR pentru APK.
-  3. **Harta pe Android** folosește Google Maps și are nevoie de o cheie API (Google Cloud → Maps SDK for Android).
-     Adaug-o pe expo.dev la *Environment variables* ca `GOOGLE_MAPS_API_KEY`, vizibilitate *Sensitive*, pentru mediile
-     preview și production. Fără cheie aplicația merge, dar ecranele cu hartă afișează un mesaj în locul hărții.
-  4. **iOS** cere un cont Apple Developer (99 USD/an): `npx eas-cli@latest build -p ios --profile production`, apoi
+  2. APK: `npm run build:android` (profilul `preview`). Cheia Google Maps se adaugă pe expo.dev la
+     *Environment variables* (`GOOGLE_MAPS_API_KEY`, *Sensitive*, mediile preview și production).
+     APK-ul de pe EAS are altă semnătură decât cel din GitHub Releases: pentru a trece de la unul la altul,
+     dezinstalează întâi aplicația.
+  3. **iOS** cere un cont Apple Developer (99 USD/an): `npx eas-cli@latest build -p ios --profile production`, apoi
      `npx eas-cli@latest submit -p ios` pentru TestFlight. Pe iOS harta este Apple Maps (fără cheie).
-  5. Pentru Google Play: `npx eas-cli@latest build -p android --profile production` (fișier AAB) și `eas submit`.
+  4. Google Play: `npx eas-cli@latest build -p android --profile production` (fișier AAB) și `eas submit`.
 
 ## CI
 
@@ -100,5 +109,9 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 - **Backend**: `mvn verify` pentru ambele servicii, migrațiile pe un Postgres real și `e2e/api-smoke.mjs` — teste end-to-end
   pentru sesiuni, finalizări, streak, biometrie, locație, prieteni, freeze, admin, resetare parolă, CORS și rate limiting.
 - **Docker**: construiește imaginile ca pe Render și măsoară pornirea cu limitele planului gratuit.
+- **Teste UI** (`e2e/ui/ui-smoke.mjs`): aplicația web, construită pentru backend-ul pornit în CI, rulează într-un Chrome
+  headless cu un passkey virtual: cont nou, activități simple / cu passkey / cu locație (inclusiv refuz de departe),
+  streak și puncte, chat, deconectare, rute protejate, resetare parolă cu codul din email, panoul de admin.
 - **Aplicația Expo**: TypeScript, ESLint, teste jest (inclusiv compatibilitatea semnăturii Ed25519 a telefonului cu
   verificarea din user-service), build-ul web pentru Netlify și bundle-urile JavaScript pentru Android și iOS.
+- **Android APK** (`android.yml`): build-ul nativ complet, la fiecare schimbare în `client/`.

@@ -86,8 +86,11 @@ async function step(name, fn) {
   }
 }
 
-const button = (name) => page.getByRole('button', { name, exact: true });
-const field = (label) => page.getByLabel(label, { exact: true });
+// Ecranele anterioare din stivă rămân în DOM (ascunse), deci căutăm doar elementele vizibile.
+const visible = (locator) => locator.filter({ visible: true });
+const button = (name) => visible(page.getByRole('button', { name, exact: true }));
+const field = (label) => visible(page.getByLabel(label, { exact: true }));
+const seen = (text) => visible(page.getByText(text)).first().waitFor();
 const path = () => new URL(page.url()).pathname;
 
 async function waitPath(expected) {
@@ -95,9 +98,9 @@ async function waitPath(expected) {
 }
 
 async function openTab(name, expectedPath) {
-  const tab = page.getByRole('tab', { name });
+  const tab = visible(page.getByRole('tab', { name }));
   if (await tab.count()) await tab.first().click();
-  else await page.getByText(name, { exact: true }).first().click();
+  else await visible(page.getByText(name, { exact: true })).first().click();
   await waitPath(expectedPath);
 }
 
@@ -114,17 +117,21 @@ async function expectDialog(from, pattern) {
 
 /** Cardul unei activități: cel mai adânc element care conține titlul și butonul cerut. */
 function taskCard(title, buttonName = 'Confirmă') {
-  return page.locator('div').filter({ hasText: title }).filter({ has: button(buttonName) }).last();
+  return visible(page.locator('div').filter({ hasText: title }).filter({ has: button(buttonName) })).last();
+}
+
+async function confirmTask(title) {
+  await taskCard(title).getByRole('button', { name: 'Confirmă', exact: true }).click();
 }
 
 async function createTask(title, { biometrics = false, location = false } = {}) {
   await page.goto(`${BASE}/task/new`);
   await field('Ce vrei să faci?').fill(title);
-  if (biometrics) await page.getByRole('switch', { name: 'Confirmare cu biometrie' }).click();
+  if (biometrics) await visible(page.getByRole('switch', { name: 'Confirmare cu biometrie' })).click();
   if (location) {
-    await page.getByRole('switch', { name: 'Confirmare în locație' }).click();
+    await visible(page.getByRole('switch', { name: 'Confirmare în locație' })).click();
     // Pinul pornește automat de la locația curentă.
-    await page.getByText(`${BRASOV.latitude.toFixed(5)}, ${BRASOV.longitude.toFixed(5)}`).waitFor();
+    await seen(`${BRASOV.latitude.toFixed(5)}, ${BRASOV.longitude.toFixed(5)}`);
   }
   await button('Adaugă activitatea').click();
   await page.waitForURL((url) => url.pathname !== '/task/new');
@@ -136,7 +143,7 @@ async function login(email, password) {
   await field('Email').fill(email);
   await field('Parolă').fill(password);
   await button('Intră în cont').click();
-  await page.getByText(/^Salut, /).first().waitFor();
+  await seen(/^Salut, /);
 }
 
 async function logout() {
@@ -152,14 +159,14 @@ let ok = await step('se deschide pagina de autentificare', async () => {
 });
 
 ok = ok && await step('cont nou', async () => {
-  await page.getByText('Cont nou', { exact: true }).click();
+  await visible(page.getByText('Cont nou', { exact: true })).click();
   await waitPath('/register');
   await field('Nume complet').fill(me.fullName);
   await field('Username').fill(me.username);
   await field('Email').fill(me.email);
   await field('Parolă (minim 12 caractere)').fill(me.password);
   await button('Creează contul').click();
-  await page.getByText('Salut, Ana!').waitFor();
+  await seen('Salut, Ana!');
   if (await page.getByRole('tab', { name: 'Admin' }).count()) throw new Error('Un utilizator normal vede tab-ul Admin');
 });
 
@@ -167,30 +174,34 @@ if (ok) {
   await step('activitate simplă: creare și confirmare → streak 1', async () => {
     await createTask('Citesc 10 pagini');
     const before = dialogs.length;
-    await taskCard('Citesc 10 pagini').getByRole('button', { name: 'Confirmă', exact: true }).click();
+    await confirmTask('Citesc 10 pagini');
     await expectDialog(before, /Streak: 1 zi · 1 punct$/m);
-    await page.getByText('Finalizată').first().waitFor();
+    // Lista arată implicit doar activitățile active; cea finalizată apare la filtrul „Finalizate”.
+    await button('Finalizate').click();
+    await seen('Citesc 10 pagini');
+    await seen('Făcută azi');
+    await button('Active').click();
   });
 
   await step('reîncărcarea paginii păstrează sesiunea și ruta', async () => {
     await page.goto(`${BASE}/tasks`);
     await page.reload();
-    await page.getByText('Citesc 10 pagini').first().waitFor();
+    await seen(/^1 în total/);
     if (path() !== '/tasks') throw new Error(`Am ajuns pe ${path()}`);
   });
 
   const passkey = await step('passkey activat din Profil', async () => {
     await openTab('Profil', '/profile');
-    await page.getByText('Neactivată pe acest dispozitiv').waitFor();
+    await seen('Neactivată pe acest dispozitiv');
     await button('Activează').click();
-    await page.getByText('Activă pe acest dispozitiv').waitFor();
+    await seen('Activă pe acest dispozitiv');
   });
 
   if (passkey) {
     await step('activitate cu biometrie: confirmată cu passkey', async () => {
       await createTask('Meditez 5 minute', { biometrics: true });
       const before = dialogs.length;
-      await taskCard('Meditez 5 minute').getByRole('button', { name: 'Confirmă', exact: true }).click();
+      await confirmTask('Meditez 5 minute');
       await expectDialog(before, /Streak: 1 zi · 2 puncte/);
     });
   }
@@ -198,7 +209,7 @@ if (ok) {
   await step('activitate cu locație: confirmată la fața locului', async () => {
     await createTask('Alerg în parc', { location: true });
     const before = dialogs.length;
-    await taskCard('Alerg în parc').getByRole('button', { name: 'Confirmă', exact: true }).click();
+    await confirmTask('Alerg în parc');
     await expectDialog(before, /Streak: 1 zi · \d+ puncte/);
   });
 
@@ -206,7 +217,7 @@ if (ok) {
     await createTask('Înot la bazin', { location: true });
     await context.setGeolocation(BUCURESTI);
     const before = dialogs.length;
-    await taskCard('Înot la bazin').getByRole('button', { name: 'Confirmă', exact: true }).click();
+    await confirmTask('Înot la bazin');
     await expectDialog(before, /Nu s-a putut confirma/);
     await taskCard('Înot la bazin').waitFor(); // încă are butonul „Confirmă”
     await context.setGeolocation(BRASOV);
@@ -215,9 +226,9 @@ if (ok) {
   await step('chat: mesajul apare în listă', async () => {
     await openTab('Social', '/social');
     const text = `Salut din testul UI ${run}`;
-    await page.getByPlaceholder('Scrie un mesaj pentru comunitate…').fill(text);
+    await visible(page.getByPlaceholder('Scrie un mesaj pentru comunitate…')).fill(text);
     await button('Trimite').click();
-    await page.getByText(text).first().waitFor();
+    await seen(text);
   });
 
   await step('deconectare și rută protejată', async () => {
@@ -252,7 +263,7 @@ if (ok) {
 
   await step('profilul arată streak-ul și punctele', async () => {
     await openTab('Profil', '/profile');
-    await page.getByText('🔥 1').first().waitFor();
+    await seen('🔥 1');
     const text = await page.evaluate(() => document.body.innerText);
     const points = Number(text.match(/Puncte\s+(\d+)/)?.[1]);
     if (!(points >= 2)) throw new Error(`Puncte afișate: ${points}`);
@@ -264,7 +275,7 @@ if (ok) {
       await logout();
       await login(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD);
       await openTab('Admin', '/admin');
-      await page.getByText(`@${me.username}`, { exact: false }).first().waitFor();
+      await seen(`@${me.username}`);
     });
   }
 }
