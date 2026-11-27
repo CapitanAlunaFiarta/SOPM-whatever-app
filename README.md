@@ -89,16 +89,14 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
   `https://github.com/CapitanAlunaFiarta/SOPM-whatever-app/releases/latest/download/whatever.apk`
   (pe telefon: deschide linkul, apoi permite instalarea din browser). APK-ul e semnat cu cheia de debug din șablonul
   Expo — potrivit pentru instalare directă, nu pentru Google Play.
-  - **Harta pe Android** folosește Google Maps și are nevoie de o cheie API (Google Cloud → Maps SDK for Android).
-    Pune-o ca secret de repository `GOOGLE_MAPS_API_KEY` (GitHub → Settings → Secrets and variables → Actions).
-    Fără cheie aplicația merge, dar ecranele cu hartă afișează un mesaj în locul hărții.
+  - **Hărțile nu au nevoie de chei API**: pe Android harta este Leaflet + OpenStreetMap într-un WebView
+    (`src/components/leaflet/`), pe iOS Apple Maps (`*.ios.tsx`), iar pe web Leaflet (`*.web.tsx`).
+    `react-native-maps` e exclus din build-ul Android (`client/react-native.config.js`).
 - **EAS Build** (opțional, în cloud; necesar pentru iOS și Google Play):
   1. Cont gratuit pe expo.dev, apoi în `client/`: `npx eas-cli@latest login` și `npx eas-cli@latest init`.
      Pune ID-ul proiectului afișat în `app.json` la `expo.extra.eas.projectId`.
-  2. APK: `npm run build:android` (profilul `preview`). Cheia Google Maps se adaugă pe expo.dev la
-     *Environment variables* (`GOOGLE_MAPS_API_KEY`, *Sensitive*, mediile preview și production).
-     APK-ul de pe EAS are altă semnătură decât cel din GitHub Releases: pentru a trece de la unul la altul,
-     dezinstalează întâi aplicația.
+  2. APK: `npm run build:android` (profilul `preview`). APK-ul de pe EAS are altă semnătură decât cel din
+     GitHub Releases: pentru a trece de la unul la altul, dezinstalează întâi aplicația.
   3. **iOS** cere un cont Apple Developer (99 USD/an): `npx eas-cli@latest build -p ios --profile production`, apoi
      `npx eas-cli@latest submit -p ios` pentru TestFlight. Pe iOS harta este Apple Maps (fără cheie).
   4. Google Play: `npx eas-cli@latest build -p android --profile production` (fișier AAB) și `eas submit`.
