@@ -10,11 +10,17 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ci.local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ci-admin-password-123';
 
 let failures = 0;
+let passed = 0;
+const annotation = (text) => String(text).slice(0, 1500).replace(/%/g, '%25').replace(/\r?\n/g, '%0A');
 const check = (name, condition, detail) => {
-  if (condition) console.log(`✓ ${name}`);
-  else {
+  if (condition) {
+    passed += 1;
+    console.log(`✓ ${name}`);
+  } else {
     failures += 1;
-    console.log(`✗ FAIL ${name}${detail === undefined ? '' : ` → ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`}`);
+    const info = detail === undefined ? '' : typeof detail === 'string' ? detail : JSON.stringify(detail);
+    console.log(`✗ FAIL ${name}${info ? ` → ${info}` : ''}`);
+    if (process.env.GITHUB_ACTIONS) console.log(`::error title=API: ${annotation(name)}::${annotation(info || 'eșuat')}`);
   }
 };
 
@@ -261,6 +267,7 @@ async function main() {
   check('logout revocă refresh token-ul', logout.status === 200 && afterLogout.status === 401, afterLogout);
 
   console.log(failures === 0 ? '\nToate verificările au trecut.' : `\n${failures} verificări au eșuat.`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::notice title=API e2e::${passed} verificări trecute, ${failures} eșuate`);
   process.exit(failures === 0 ? 0 : 1);
 }
 

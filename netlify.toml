@@ -1,6 +1,7 @@
+# Site-ul web este aplicația Expo din client/ (același cod ca aplicațiile Android/iOS).
 [build]
-  base = "web-app"
-  command = "npm run build"
+  base = "client"
+  command = "npx expo export -p web"
   publish = "dist"
 
 [build.environment]
@@ -14,11 +15,18 @@
     X-Frame-Options = "DENY"
     Permissions-Policy = "geolocation=(self), publickey-credentials-get=(self), publickey-credentials-create=(self)"
 
+# Fișierele generate de Expo au hash în nume, deci pot fi păstrate în cache oricât.
+[[headers]]
+  for = "/_expo/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# Aplicație cu o singură pagină: orice rută (/tasks, /reset?code=...) încarcă index.html.
 [[redirects]]
   from = "/*"
   to = "/index.html"

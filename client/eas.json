@@ -1,0 +1,36 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_USER_API": "https://whatever-user-service.onrender.com/api",
+        "EXPO_PUBLIC_TASK_API": "https://whatever-task-service.onrender.com/api"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_USER_API": "https://whatever-user-service.onrender.com/api",
+        "EXPO_PUBLIC_TASK_API": "https://whatever-task-service.onrender.com/api"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_USER_API": "https://whatever-user-service.onrender.com/api",
+        "EXPO_PUBLIC_TASK_API": "https://whatever-task-service.onrender.com/api"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

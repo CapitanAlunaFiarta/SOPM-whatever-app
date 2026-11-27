@@ -8,7 +8,7 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
 | `backend/user-service` | Spring Boot 3.5, Java 21 — conturi, sesiuni, email, passkey, biometrie, social, admin | Render (Docker) |
 | `backend/task-service` | Spring Boot 3.5, Java 21 — activități, streak, freeze, verificări | Render (Docker) |
 | `database/migrations` | PostgreSQL (SQL simplu, rulat în ordine) | Supabase |
-| `web-app` | React 18 + Vite — site-ul actual | Netlify (`whatever-app-unitbv.me`) |
+| `client` | Expo SDK 58: React Native + React Native Web, Expo Router — **un singur cod** pentru Android, iOS și web | Netlify (web, `whatever-app-unitbv.me`), GitHub Releases (APK Android), EAS Build (opțional, Android/iOS) |
 
 ## Reguli de business
 
@@ -17,7 +17,7 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
 - **Freeze**: 3 pe lună. Se folosește pe o activitate restantă: o mută pe azi și acoperă o zi ratată din streak.
 - **Recurent** = zilnic: după finalizare, activitatea rămâne activă cu scadența mâine. Se poate finaliza o dată pe zi.
 - O activitate ne-recurentă se finalizează o singură dată (garantat și în baza de date, `task_completions`).
-- **Locație**: serverul verifică distanța față de pin (cu toleranța preciziei GPS, max. 50 m). În aplicația nativă, locațiile simulate sunt respinse.
+- **Locație**: serverul verifică distanța față de pin (cu toleranța preciziei GPS, max. 50 m). În aplicația de telefon, locațiile simulate (mock) sunt respinse.
 - **Biometrie**: serverul acceptă doar un token biometric semnat, emis după
   - un passkey WebAuthn valid (web), sau
   - o semnătură Ed25519 făcută de telefon cu o cheie păstrată în Keychain/Keystore și deblocată cu amprentă/Face ID (aplicația nativă).
@@ -29,7 +29,18 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
 1. Copiază `.env.example` în `.env` și înlocuiește valorile `replace-with-*`. Nu comite `.env`.
 2. `docker compose up --build` — pornește Postgres (rulează toate fișierele din `database/migrations`), user-service pe `:8081` și task-service pe `:8082`.
    Local, `MAIL_PROVIDER=log` scrie emailurile (inclusiv codul de resetare) în logul user-service.
-3. Frontend: `cd web-app && npm install && npm run dev` → `http://localhost:5173`.
+3. Aplicația: `cd client && npm install && npm start` (serverul Expo pornește pe portul 5173, ca să nu se bată cu user-service pe 8081).
+   - `w` deschide versiunea web pe `http://localhost:5173`;
+   - pe telefon, scanează codul QR cu **Expo Go** (Android/iOS).
+
+   Implicit aplicația vorbește cu serverele de pe Render. Pentru backend-ul local creează `client/.env.local`:
+   ```
+   EXPO_PUBLIC_USER_API=http://<IP-ul calculatorului în rețea>:8081/api
+   EXPO_PUBLIC_TASK_API=http://<IP-ul calculatorului în rețea>:8082/api
+   ```
+   (pe telefon, `localhost` înseamnă telefonul, nu calculatorul).
+
+Verificări pentru `client`: `npm run typecheck`, `npm run lint`, `npm test`.
 
 ## Variabile de mediu (Render)
 
@@ -69,8 +80,28 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 - **Render**: ambele servicii se redeployează automat la push pe `main`. Imaginile Docker folosesc CDS (Class Data Sharing)
   și un utilizator non-root; pe 0,1 CPU / 512 MB pornirea scade de la ~80 s la ~25 s. Serviciile gratuite adorm după 15 minute fără trafic.
   Serviciile sunt în Oregon; pentru latență mai mică cu Supabase (Irlanda) recreează-le în Frankfurt (regiunea nu se poate schimba ulterior).
-- **Netlify**: base directory `web-app`, build `npm run build`, publish `dist` (în `netlify.toml`). `VITE_USER_API` și `VITE_TASK_API`
-  se setează în Netlify și se compilează la build.
+- **Netlify** (site-ul web): base directory `client`, build `npx expo export -p web`, publish `dist` (în `netlify.toml`).
+  Fiecare pull request primește un deploy preview. Adresele API sunt implicit cele de pe Render; se pot schimba cu
+  `EXPO_PUBLIC_USER_API` și `EXPO_PUBLIC_TASK_API` (variabile de mediu în Netlify). Variabilele vechi `VITE_*` nu mai sunt folosite.
+- **Android (APK, automat)**: workflow-ul `.github/workflows/android.yml` construiește aplicația din `client/`
+  (`expo prebuild` + Gradle) la fiecare push pe `main` care atinge `client/` și o publică în GitHub Releases.
+  Ultima versiune se descarcă mereu de la
+  `https://github.com/CapitanAlunaFiarta/SOPM-whatever-app/releases/latest/download/whatever.apk`
+  (pe telefon: deschide linkul, apoi permite instalarea din browser). APK-ul e semnat cu cheia de debug din șablonul
+  Expo — potrivit pentru instalare directă, nu pentru Google Play.
+  - **Harta pe Android** folosește Google Maps și are nevoie de o cheie API (Google Cloud → Maps SDK for Android).
+    Pune-o ca secret de repository `GOOGLE_MAPS_API_KEY` (GitHub → Settings → Secrets and variables → Actions).
+    Fără cheie aplicația merge, dar ecranele cu hartă afișează un mesaj în locul hărții.
+- **EAS Build** (opțional, în cloud; necesar pentru iOS și Google Play):
+  1. Cont gratuit pe expo.dev, apoi în `client/`: `npx eas-cli@latest login` și `npx eas-cli@latest init`.
+     Pune ID-ul proiectului afișat în `app.json` la `expo.extra.eas.projectId`.
+  2. APK: `npm run build:android` (profilul `preview`). Cheia Google Maps se adaugă pe expo.dev la
+     *Environment variables* (`GOOGLE_MAPS_API_KEY`, *Sensitive*, mediile preview și production).
+     APK-ul de pe EAS are altă semnătură decât cel din GitHub Releases: pentru a trece de la unul la altul,
+     dezinstalează întâi aplicația.
+  3. **iOS** cere un cont Apple Developer (99 USD/an): `npx eas-cli@latest build -p ios --profile production`, apoi
+     `npx eas-cli@latest submit -p ios` pentru TestFlight. Pe iOS harta este Apple Maps (fără cheie).
+  4. Google Play: `npx eas-cli@latest build -p android --profile production` (fișier AAB) și `eas submit`.
 
 ## CI
 
@@ -78,4 +109,9 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 - **Backend**: `mvn verify` pentru ambele servicii, migrațiile pe un Postgres real și `e2e/api-smoke.mjs` — teste end-to-end
   pentru sesiuni, finalizări, streak, biometrie, locație, prieteni, freeze, admin, resetare parolă, CORS și rate limiting.
 - **Docker**: construiește imaginile ca pe Render și măsoară pornirea cu limitele planului gratuit.
-- **Web**: build-ul Vite.
+- **Teste UI** (`e2e/ui/ui-smoke.mjs`): aplicația web, construită pentru backend-ul pornit în CI, rulează într-un Chrome
+  headless cu un passkey virtual: cont nou, activități simple / cu passkey / cu locație (inclusiv refuz de departe),
+  streak și puncte, chat, deconectare, rute protejate, resetare parolă cu codul din email, panoul de admin.
+- **Aplicația Expo**: TypeScript, ESLint, teste jest (inclusiv compatibilitatea semnăturii Ed25519 a telefonului cu
+  verificarea din user-service), build-ul web pentru Netlify și bundle-urile JavaScript pentru Android și iOS.
+- **Android APK** (`android.yml`): build-ul nativ complet, la fiecare schimbare în `client/`.
