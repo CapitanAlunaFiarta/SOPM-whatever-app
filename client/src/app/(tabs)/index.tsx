@@ -9,9 +9,10 @@ import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { localDate, monthKey } from '@/lib/dates';
 import { useMe, useRecap, useTasks } from '@/lib/queries';
-import type { Task } from '@/lib/types';
+import { isMember, type Task } from '@/lib/types';
 
-const isOpen = (task: Task) => (task.status === 'Upcoming' || task.status === 'Overdue') && !task.completedToday;
+// De făcut: activități active la care sunt membru și la care nu mi-am făcut încă partea.
+const isOpen = (task: Task) => (task.status === 'Upcoming' || task.status === 'Overdue') && !task.confirmedByMe;
 
 export default function HomeScreen() {
   const { t, tp } = useI18n();
@@ -20,7 +21,8 @@ export default function HomeScreen() {
   const tasks = useTasks();
   const recap = useRecap(monthKey());
   const current = me.data ?? user;
-  const mine = (tasks.data ?? []).filter((task) => task.isOwner);
+  const mine = (tasks.data ?? []).filter(isMember);
+  const invites = (tasks.data ?? []).filter((task) => task.myStatus === 'INVITED');
   const open = mine.filter(isOpen);
   const overdue = open.filter((task) => task.status === 'Overdue');
   const streak = current?.streak ?? 0;
@@ -61,6 +63,13 @@ export default function HomeScreen() {
         </Row>
         <Button title={t('task.newTitle')} icon="add" onPress={() => router.push('/task/new')} />
       </Card>
+
+      {invites.length > 0 && (
+        <>
+          <AppText variant="heading">{t('home.invites')}</AppText>
+          {invites.map((task) => <TaskCard key={task.id} task={task} compact />)}
+        </>
+      )}
 
       <Row style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
         <StatTile label={t('stats.points')} value={current?.points ?? 0} hint={t('stats.pointsHint')} tone="success" icon="star-outline" />

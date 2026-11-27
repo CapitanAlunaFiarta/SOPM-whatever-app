@@ -36,6 +36,11 @@ describe('friendlyDate', () => {
     expect(friendlyDate('2026-11-20', 'en', { today, inline: true })).toBe('Nov 20');
   });
 
+  it('absolut: mereu ziua și luna', () => {
+    expect(friendlyDate('2026-11-27', 'ro', { today, absolute: true })).toBe('27 nov.');
+    expect(friendlyDate('2026-11-28', 'en', { today, absolute: true })).toBe('Nov 28');
+  });
+
   it('altfel zi și lună, cu anul doar dacă diferă', () => {
     expect(friendlyDate('2026-11-20', 'ro', { today })).toBe('20 nov.');
     expect(friendlyDate('2027-05-01', 'ro', { today })).toBe('1 mai 2027');

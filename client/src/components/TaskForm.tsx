@@ -12,21 +12,23 @@ import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_COORDS, PRIORITIES, type Task, ty
 import { DateField } from './DateField';
 import { LocationPicker } from './LocationPicker';
 import { colors } from './theme';
-import { Banner, Button, Card, ChipGroup, Row, TextField, ToggleRow } from './ui';
+import { AppText, Banner, Button, Card, ChipGroup, MultiChipGroup, Row, TextField, ToggleRow } from './ui';
 
 const RADIUS_OPTIONS = ['50', '100', '150', '300', '500', '1000'] as const;
 
 function initialInput(task?: Task): TaskInput {
   if (task) {
-    const { title, category, priority, dueDate, isRecurring, requiresLocation, latitude, longitude, radius, requiresBiometrics, friend } = task;
+    const { title, category, priority, dueDate, isRecurring, requiresLocation, latitude, longitude, radius, requiresBiometrics } = task;
     return {
-      title, category, priority, dueDate, isRecurring, requiresLocation, requiresBiometrics, friend,
+      title, category, priority, dueDate, isRecurring, requiresLocation, requiresBiometrics,
+      // Cei care au refuzat nu sunt bifați; dacă îi bifezi din nou, primesc o invitație nouă.
+      participants: (task.participants ?? []).filter((person) => person.status !== 'DECLINED').map((person) => person.username),
       latitude: latitude || DEFAULT_COORDS.latitude, longitude: longitude || DEFAULT_COORDS.longitude, radius: radius || 150,
     };
   }
   return {
     title: '', category: DEFAULT_CATEGORY, priority: 'Medium', dueDate: localDate(), isRecurring: false,
-    requiresLocation: false, ...DEFAULT_COORDS, radius: 150, requiresBiometrics: false, friend: '',
+    requiresLocation: false, ...DEFAULT_COORDS, radius: 150, requiresBiometrics: false, participants: [],
   };
 }
 
@@ -67,7 +69,11 @@ export function TaskForm({ task }: { task?: Task }) {
     }
   };
 
-  const friendOptions = ['', ...(friends.data ?? []).map((friend) => friend.username)];
+  // Prietenii actuali, plus cei deja invitați (chiar dacă între timp nu mai sunteți prieteni).
+  const declined = new Set((task?.participants ?? []).filter((person) => person.status === 'DECLINED').map((person) => person.username));
+  const friendOptions = Array.from(new Set([
+    ...(friends.data ?? []).map((friend) => friend.username), ...input.participants, ...declined,
+  ]));
   const radiusOptions = Array.from(new Set<string>([...RADIUS_OPTIONS, String(input.radius)]))
     .sort((a, b) => Number(a) - Number(b));
 
@@ -115,11 +121,13 @@ export function TaskForm({ task }: { task?: Task }) {
         )}
       </Card>
 
-      {friendOptions.length > 1 && (
+      {friendOptions.length > 0 && (
         <Card>
-          <Text style={styles.label}>{t('form.shareWith')}</Text>
-          <ChipGroup options={friendOptions} value={input.friend} onChange={(value) => set('friend', value)}
-            labels={Object.fromEntries(friendOptions.map((name) => [name, name ? `@${name}` : t('form.nobody')]))} />
+          <Text style={styles.label}>{t('form.withFriends')}</Text>
+          <MultiChipGroup options={friendOptions} values={input.participants} onChange={(value) => set('participants', value)}
+            labels={Object.fromEntries(friendOptions.map((name) => [name,
+              declined.has(name) && !input.participants.includes(name) ? t('form.declinedSuffix', { username: name }) : `@${name}`]))} />
+          <AppText variant="small">{t('form.withFriendsHint')}</AppText>
         </Card>
       )}
 

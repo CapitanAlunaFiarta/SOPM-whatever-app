@@ -6,17 +6,18 @@ import { Banner, Button, Card, ChipGroup, EmptyState, Screen, TextField } from '
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useTasks } from '@/lib/queries';
-import type { Task } from '@/lib/types';
+import { isMember, type Task } from '@/lib/types';
 
-const FILTERS = ['active', 'overdue', 'completed', 'canceled', 'shared', 'all'] as const;
+const FILTERS = ['active', 'invites', 'overdue', 'completed', 'canceled', 'shared', 'all'] as const;
 type Filter = (typeof FILTERS)[number];
 
 const matches: Record<Filter, (task: Task) => boolean> = {
-  active: (task) => task.isOwner && (task.status === 'Upcoming' || task.status === 'Overdue'),
-  overdue: (task) => task.isOwner && task.status === 'Overdue',
+  active: (task) => isMember(task) && (task.status === 'Upcoming' || task.status === 'Overdue'),
+  invites: (task) => task.myStatus === 'INVITED',
+  overdue: (task) => isMember(task) && task.status === 'Overdue',
   completed: (task) => task.status === 'Completed' || task.completedToday,
   canceled: (task) => task.status === 'Canceled',
-  shared: (task) => !task.isOwner || Boolean(task.friend),
+  shared: (task) => !task.isOwner || (task.participants ?? []).some((person) => person.status !== 'DECLINED'),
   all: () => true,
 };
 

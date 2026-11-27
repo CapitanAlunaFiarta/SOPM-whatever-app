@@ -45,7 +45,7 @@ type I18nValue = {
   setLanguage: (language: Language) => void;
   t: (key: TextKey, params?: Params) => string;
   tp: (key: PluralKey, count: number, params?: Params) => string;
-  formatDate: (value: string, options?: { inline?: boolean }) => string;
+  formatDate: (value: string, options?: { inline?: boolean; absolute?: boolean }) => string;
   formatTime: (value: string) => string;
   formatMonth: (month: string) => string;
 };

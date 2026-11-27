@@ -22,7 +22,11 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
   - un passkey WebAuthn valid (web), sau
   - o semnătură Ed25519 făcută de telefon cu o cheie păstrată în Keychain/Keystore și deblocată cu amprentă/Face ID (aplicația nativă).
   Un câmp boolean trimis de client nu mai este acceptat.
-- Partajarea unei activități se face doar cu prietenii. Emailurile altor utilizatori nu sunt expuse niciodată (prieteni, clasament, activități partajate).
+- **Activități cu prieteni**: poți invita până la 10 prieteni la o activitate.
+  - Fiecare invitat acceptă sau refuză. Cine acceptă devine membru, își confirmă singur partea (cu aceleași verificări de locație și biometrie) și primește streak și puncte.
+  - O activitate unică se încheie când au confirmat toți membrii și nu mai așteaptă nicio invitație; una zilnică trece pe mâine când au confirmat toți în ziua respectivă.
+  - Chatul activității (separat de cel general) se deschide la prima acceptare și devine doar de citit la 5 zile după încheiere sau anulare.
+- Emailurile altor utilizatori nu sunt expuse niciodată (prieteni, clasament, activități de grup, chat).
 - **Categorii**: `SPORT` (activitate fizică), `STUDY` (facultate/studiu), `CHORES` (treburi, comisioane — implicită), `ENTERTAINMENT`.
   Serverul păstrează cheile, aplicația afișează numele traduse. Valorile vechi sunt acceptate și mapate
   (Sport/Sănătate → SPORT, Facultate/Proiect Echipă → STUDY, restul → CHORES; migrarea `003`).

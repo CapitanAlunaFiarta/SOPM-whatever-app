@@ -152,6 +152,28 @@ export function ChipGroup<T extends string>({ options, value, onChange, labels }
   );
 }
 
+/** Ca ChipGroup, dar cu mai multe alegeri (ex. prietenii invitați la o activitate). */
+export function MultiChipGroup({ options, values, onChange, labels }: {
+  options: readonly string[]; values: readonly string[]; onChange: (values: string[]) => void; labels?: Record<string, string>;
+}) {
+  return (
+    <View style={styles.chips}>
+      {options.map((option) => {
+        const selected = values.includes(option);
+        return (
+          <Pressable key={option} accessibilityRole="checkbox" accessibilityState={{ checked: selected }}
+            accessibilityLabel={labels?.[option] ?? option}
+            onPress={() => onChange(selected ? values.filter((value) => value !== option) : [...values, option])}
+            style={[styles.chip, selected && styles.chipSelected]}>
+            {selected ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
+            <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{labels?.[option] ?? option}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function ToggleRow({ label, description, value, onChange, icon }: {
   label: string; description?: string; value: boolean; onChange: (value: boolean) => void; icon?: IconName;
 }) {
@@ -287,7 +309,10 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: 44, maxHeight: 120 },
   fieldError: { color: colors.red, fontSize: 12.5, marginTop: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 13 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.elevated, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 13,
+  },
   chipSelected: { backgroundColor: `${colors.indigo}33`, borderColor: colors.indigo },
   chipText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
   chipTextSelected: { color: colors.text },
