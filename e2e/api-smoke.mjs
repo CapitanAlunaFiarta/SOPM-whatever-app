@@ -282,6 +282,74 @@ async function main() {
   check('grup zilnic: după ultimul membru trece pe mâine', bDaily.json?.task?.dueDate === tomorrow
     && bDaily.json.task.status === 'Upcoming' && bDaily.json.task.confirmedCount === 2, bDaily.json?.task);
 
+  // --- favoruri: „pasă ca la tenis”, poză făcută la locație și aprobată de cel care a cerut
+  const PHOTO = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCCiiimfOH/2Q==';
+  const favorPlace = { latitude: 45.6427, longitude: 25.5887, radius: 150 };
+  const photoAt = (place, extra = {}) => ({
+    photo: `data:image/jpeg;base64,${PHOTO}`, latitude: place.latitude, longitude: place.longitude, accuracy: 10,
+    takenAt: new Date().toISOString(), ...extra,
+  });
+  const favorBody = (friend, title) => ({ friend, title, details: 'Mulțumesc!', category: 'CHORES', dueDate: tomorrow, ...favorPlace });
+  const strangerFavor = await call('POST', `${TASK}/favors`, { token: tokenC, body: favorBody(userB.username, 'Nu') });
+  check('favor: doar prietenilor', strangerFavor.status === 400, strangerFavor);
+  const firstFavor = await call('POST', `${TASK}/favors`, { token: tokenA, body: favorBody(userB.username, 'Cumpără pâine') });
+  check('favor: primul favor nu e obligatoriu', firstFavor.status === 200 && firstFavor.json?.status === 'REQUESTED'
+    && firstFavor.json.obligated === false && firstFavor.json.role === 'REQUESTER' && firstFavor.json.friend?.username === userB.username, firstFavor.json);
+  const secondOpen = await call('POST', `${TASK}/favors`, { token: tokenB, body: favorBody(userA.username, 'Și eu') });
+  check('favor: un singur favor deschis între doi prieteni', secondOpen.status === 409, secondOpen);
+  const refuseFree = await call('POST', `${TASK}/favors/${firstFavor.json?.id}/refuse`, { token: tokenB });
+  check('favor: „nerezonabil” doar când datorezi', refuseFree.status === 409, refuseFree);
+  const favorDeclined = await call('POST', `${TASK}/favors/${firstFavor.json?.id}/decline`, { token: tokenB });
+  check('favor: B refuză liber primul favor', favorDeclined.status === 200 && favorDeclined.json?.status === 'DECLINED', favorDeclined.json);
+  const askFavor = await call('POST', `${TASK}/favors`, { token: tokenA, body: favorBody(userB.username, 'Udă florile') });
+  const fid = askFavor.json?.id;
+  const earlyPhoto = await call('POST', `${TASK}/favors/${fid}/photo`, { token: tokenB, body: photoAt(favorPlace) });
+  check('favor: poza abia după acceptare', earlyPhoto.status === 409, earlyPhoto);
+  await call('POST', `${TASK}/favors/${fid}/accept`, { token: tokenB });
+  const farPhoto = await call('POST', `${TASK}/favors/${fid}/photo`, { token: tokenB, body: photoAt({ latitude: 44.4268, longitude: 26.1025 }) });
+  check('favor: poza de departe e refuzată', farPhoto.status === 400 && /m de locația/.test(farPhoto.json?.error || ''), farPhoto);
+  const oldPhoto = await call('POST', `${TASK}/favors/${fid}/photo`, { token: tokenB, body: photoAt(favorPlace, { takenAt: '2026-01-01T10:00:00Z' }) });
+  check('favor: poza veche (nu din cameră acum) e refuzată', oldPhoto.status === 400, oldPhoto);
+  const notJpeg = await call('POST', `${TASK}/favors/${fid}/photo`, { token: tokenB, body: photoAt(favorPlace, { photo: 'aGVsbG8gd29ybGQ=' }) });
+  check('favor: doar JPEG', notJpeg.status === 400, notJpeg);
+  const favorSubmitted = await call('POST', `${TASK}/favors/${fid}/photo`, { token: tokenB, body: photoAt(favorPlace) });
+  check('favor: poza la locație → așteaptă aprobarea', favorSubmitted.status === 200 && favorSubmitted.json?.status === 'SUBMITTED'
+    && favorSubmitted.json.hasPhoto === true, favorSubmitted.json);
+  const strangerPhoto = await call('GET', `${TASK}/favors/${fid}/photo`, { token: tokenC });
+  const photoForA = await call('GET', `${TASK}/favors/${fid}/photo`, { token: tokenA });
+  check('favor: poza o văd doar cei doi', strangerPhoto.status === 404
+    && photoForA.json?.dataUrl === `data:image/jpeg;base64,${PHOTO}`, strangerPhoto);
+  const selfApprove = await call('POST', `${TASK}/favors/${fid}/approve`, { token: tokenB });
+  check('favor: cel care l-a făcut nu-și aprobă singur poza', selfApprove.status === 403, selfApprove);
+  const favorRejected = await call('POST', `${TASK}/favors/${fid}/reject`, { token: tokenA, body: { note: 'Nu se văd florile' } });
+  check('favor: poza respinsă → se poate face alta', favorRejected.json?.status === 'ACCEPTED' && favorRejected.json.reviewNote === 'Nu se văd florile', favorRejected.json);
+  await call('POST', `${TASK}/favors/${fid}/photo`, { token: tokenB, body: photoAt(favorPlace) });
+  const pointsBefore = (await call('GET', `${USER}/users/me`, { token: tokenB })).json?.points ?? 0;
+  const favorApproved = await call('POST', `${TASK}/favors/${fid}/approve`, { token: tokenA });
+  const pointsAfter = (await call('GET', `${USER}/users/me`, { token: tokenB })).json?.points ?? 0;
+  check('favor: aprobat → B primește un punct', favorApproved.json?.status === 'COMPLETED' && pointsAfter === pointsBefore + 1, { approved: favorApproved.json, pointsBefore, pointsAfter });
+  const balancesA = await call('GET', `${TASK}/favors`, { token: tokenA });
+  const balancesB = await call('GET', `${TASK}/favors`, { token: tokenB });
+  check('favor: acum A îi datorează lui B', balancesA.json?.balances?.find((b) => b.username === userB.username)?.balance === 'I_OWE'
+    && balancesB.json?.balances?.find((b) => b.username === userA.username)?.balance === 'THEY_OWE', balancesA.json?.balances);
+  const owesAsk = await call('POST', `${TASK}/favors`, { token: tokenA, body: favorBody(userB.username, 'Încă unul') });
+  check('favor: cine datorează nu poate cere', owesAsk.status === 409, owesAsk);
+  const returnFavor = await call('POST', `${TASK}/favors`, { token: tokenB, body: favorBody(userA.username, 'Du gunoiul') });
+  check('favor: B cere înapoi → A e obligat', returnFavor.json?.obligated === true, returnFavor.json);
+  const declineOwed = await call('POST', `${TASK}/favors/${returnFavor.json?.id}/decline`, { token: tokenA });
+  check('favor: cine datorează nu poate refuza liber', declineOwed.status === 409, declineOwed);
+  const unreasonable = await call('POST', `${TASK}/favors/${returnFavor.json?.id}/refuse`, { token: tokenA });
+  const stillOwes = await call('GET', `${TASK}/favors`, { token: tokenA });
+  check('favor: „nerezonabil” → datoria rămâne', unreasonable.json?.status === 'REFUSED'
+    && stillOwes.json?.balances?.find((b) => b.username === userB.username)?.balance === 'I_OWE', unreasonable.json);
+  const favorOther = await call('POST', `${TASK}/favors`, { token: tokenB, body: favorBody(userA.username, 'Altceva') });
+  const favorCanceled = await call('POST', `${TASK}/favors/${favorOther.json?.id}/cancel`, { token: tokenB });
+  check('favor: după refuz se poate cere altul, iar cine a cerut îl poate anula', favorOther.status === 200
+    && favorOther.json?.obligated === true && favorCanceled.json?.status === 'CANCELED', { other: favorOther.json, canceled: favorCanceled.json });
+  const recapFavor = await call('GET', `${TASK}/tasks/recap`, { token: tokenB });
+  check('favor: intră în recap-ul celui care l-a făcut',
+    recapFavor.json?.categories?.find((item) => item.category === 'CHORES')?.count >= 1, recapFavor.json);
+
   // --- freeze
   const overdue = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Restant', dueDate: yesterday }) });
   check('task cu scadență ieri apare Overdue', overdue.json?.status === 'Overdue', overdue.json);

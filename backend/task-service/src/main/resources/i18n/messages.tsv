@@ -41,3 +41,28 @@ Chatul se deschide după ce un prieten acceptă invitația.	The chat opens once 
 Chatul acestei activități s-a închis.	This activity's chat is closed.	El chat de esta actividad está cerrado.
 Mesajul nu poate fi gol.	The message can't be empty.	El mensaje no puede estar vacío.
 Mesajul poate avea cel mult 2000 de caractere.	The message can be at most 2000 characters long.	El mensaje puede tener como máximo 2000 caracteres.
+Poți cere favoruri doar prietenilor tăi.	You can only ask your friends for favors.	Solo puedes pedir favores a tus amigos.
+Aveți deja un favor în desfășurare. Terminați-l întâi.	You already have a favor in progress. Finish it first.	Ya tenéis un favor en curso. Terminadlo primero.
+Îi datorezi deja un favor acestui prieten: fă-i-l întâi tu, apoi poți cere altul.	You already owe this friend a favor: do it first, then you can ask for another.	Ya le debes un favor a este amigo: házselo primero y luego podrás pedir otro.
+Scadența nu poate fi în trecut.	The due date can't be in the past.	La fecha límite no puede estar en el pasado.
+Alege locul favorului pe hartă.	Pick the favor's place on the map.	Elige el lugar del favor en el mapa.
+Doar prietenul rugat poate răspunde.	Only the friend who was asked can answer.	Solo puede responder el amigo al que se le pidió.
+Favorul nu mai așteaptă un răspuns.	This favor is no longer waiting for an answer.	Este favor ya no espera respuesta.
+Îi datorezi un favor: poți refuza doar dacă cererea nu e rezonabilă.	You owe them a favor: you can only refuse if the request isn't reasonable.	Le debes un favor: solo puedes rechazarlo si la petición no es razonable.
+Nu îi datorezi nimic: poți refuza simplu.	You don't owe them anything: you can simply decline.	No le debes nada: puedes rechazarlo sin más.
+Doar cine a cerut favorul îl poate anula.	Only the person who asked for the favor can cancel it.	Solo quien pidió el favor puede cancelarlo.
+Favorul nu mai poate fi anulat.	This favor can no longer be canceled.	Este favor ya no se puede cancelar.
+Doar prietenul rugat trimite poza.	Only the friend who was asked sends the photo.	Solo el amigo al que se le pidió envía la foto.
+Poza se trimite după ce accepți favorul.	Send the photo after you accept the favor.	La foto se envía después de aceptar el favor.
+Favorul nu există.	This favor doesn't exist.	El favor no existe.
+Favorul nu are încă o poză.	This favor doesn't have a photo yet.	Este favor aún no tiene foto.
+Doar cine a cerut favorul aprobă poza.	Only the person who asked for the favor approves the photo.	Solo quien pidió el favor aprueba la foto.
+Nu e nicio poză de aprobat.	There's no photo to approve.	No hay ninguna foto que aprobar.
+Poza lipsește.	The photo is missing.	Falta la foto.
+Poza nu este validă.	The photo isn't valid.	La foto no es válida.
+Poza este prea mare.	The photo is too large.	La foto es demasiado grande.
+Fă poza acum, cu camera din aplicație.	Take the photo now, with the in-app camera.	Haz la foto ahora, con la cámara de la app.
+Scrie ce favor ceri.	Write which favor you're asking for.	Escribe qué favor pides.
+Detaliile sunt prea lungi.	The details are too long.	Los detalles son demasiado largos.
+Alege prietenul.	Pick a friend.	Elige un amigo.
+Motivul poate avea cel mult 300 de caractere.	The reason can be at most 300 characters long.	El motivo puede tener como máximo 300 caracteres.

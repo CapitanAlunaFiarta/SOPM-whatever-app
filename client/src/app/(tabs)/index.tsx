@@ -8,8 +8,8 @@ import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { localDate, monthKey } from '@/lib/dates';
-import { useMe, useRecap, useTasks } from '@/lib/queries';
-import { isMember, type Task } from '@/lib/types';
+import { useFavors, useMe, useRecap, useTasks } from '@/lib/queries';
+import { favorNeedsMe, isMember, type Task } from '@/lib/types';
 
 // De făcut: activități active la care sunt membru și la care nu mi-am făcut încă partea.
 const isOpen = (task: Task) => (task.status === 'Upcoming' || task.status === 'Overdue') && !task.confirmedByMe;
@@ -20,6 +20,8 @@ export default function HomeScreen() {
   const me = useMe();
   const tasks = useTasks();
   const recap = useRecap(monthKey());
+  const favors = useFavors();
+  const favorsWaiting = (favors.data?.favors ?? []).filter(favorNeedsMe).length;
   const current = me.data ?? user;
   const mine = (tasks.data ?? []).filter(isMember);
   const invites = (tasks.data ?? []).filter((task) => task.myStatus === 'INVITED');
@@ -63,6 +65,19 @@ export default function HomeScreen() {
         </Row>
         <Button title={t('task.newTitle')} icon="add" onPress={() => router.push('/task/new')} />
       </Card>
+
+      {favorsWaiting > 0 && (
+        <Card>
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+              <AppText variant="heading">{t('social.favors')}</AppText>
+              <AppText variant="muted">{tp('plural.favorsWaiting', favorsWaiting)}</AppText>
+            </View>
+            <Button compact title={t('home.openFavors')} icon="hand-left-outline"
+              onPress={() => router.push({ pathname: '/social', params: { section: 'favors' } })} />
+          </Row>
+        </Card>
+      )}
 
       {invites.length > 0 && (
         <>
