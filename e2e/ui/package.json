@@ -1,0 +1,12 @@
+{
+  "name": "whatever-ui-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Teste end-to-end ale aplicației web (client/) în Chrome headless, pe backend-ul pornit în CI.",
+  "scripts": {
+    "test": "node ui-smoke.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.65.1"
+  }
+}

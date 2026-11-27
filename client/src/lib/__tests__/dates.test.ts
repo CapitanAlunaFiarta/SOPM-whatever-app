@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { friendlyDate, localDate, parseLocalDate, pluralDays } from '../dates';
+import { friendlyDate, localDate, parseLocalDate, plural, pluralDays, pluralPoints } from '../dates';
 
 describe('localDate', () => {
   const from = new Date(2026, 10, 30, 23, 30); // 30 nov. 2026, 23:30 ora locală
@@ -34,10 +34,26 @@ describe('friendlyDate', () => {
   });
 });
 
-describe('pluralDays', () => {
+describe('plural', () => {
   it('1 zi, altfel zile', () => {
     expect(pluralDays(1)).toBe('1 zi');
     expect(pluralDays(0)).toBe('0 zile');
     expect(pluralDays(12)).toBe('12 zile');
+  });
+
+  it('„de” de la 20 în sus și la sute', () => {
+    expect(pluralDays(20)).toBe('20 de zile');
+    expect(pluralDays(99)).toBe('99 de zile');
+    expect(pluralDays(100)).toBe('100 de zile');
+    expect(pluralDays(101)).toBe('101 zile');
+    expect(pluralDays(119)).toBe('119 zile');
+    expect(pluralDays(120)).toBe('120 de zile');
+  });
+
+  it('puncte', () => {
+    expect(pluralPoints(1)).toBe('1 punct');
+    expect(pluralPoints(3)).toBe('3 puncte');
+    expect(pluralPoints(25)).toBe('25 de puncte');
+    expect(plural(2, 'freeze', 'freeze-uri')).toBe('2 freeze-uri');
   });
 });

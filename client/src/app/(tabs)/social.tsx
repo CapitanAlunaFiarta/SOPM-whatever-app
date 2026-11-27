@@ -7,7 +7,7 @@ import {
 } from '@/components/ui';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatTimestamp, pluralDays } from '@/lib/dates';
+import { formatTimestamp, pluralDays, pluralPoints } from '@/lib/dates';
 import { confirmAction } from '@/lib/dialogs';
 import {
   useChat, useDeleteChat, useFriendAction, useFriends, useLeaderboard, useSendChat,
@@ -156,7 +156,7 @@ function LeaderboardSection() {
               <Text style={[styles.position, index < 3 && { color: colors.amber }]}>{index + 1}</Text>
               <View style={{ flex: 1 }}>
                 <AppText style={{ fontWeight: '700' }}>{entry.fullName}{me ? ' (tu)' : ''}</AppText>
-                <AppText variant="small">@{entry.username} · {entry.points} puncte</AppText>
+                <AppText variant="small">@{entry.username} · {pluralPoints(entry.points)}</AppText>
               </View>
               <AppText style={{ color: colors.amber, fontWeight: '800' }}>🔥 {pluralDays(entry.streak)}</AppText>
             </Row>

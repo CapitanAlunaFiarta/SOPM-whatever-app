@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { errorMessage } from '@/lib/api';
-import { friendlyDate } from '@/lib/dates';
+import { friendlyDate, pluralDays, pluralPoints } from '@/lib/dates';
 import { confirmAction, showMessage } from '@/lib/dialogs';
 import { useCompleteTask, useTaskAction } from '@/lib/queries';
 import { PRIORITY_LABELS, STATUS_LABELS, type Task } from '@/lib/types';
@@ -35,7 +35,7 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
   const onComplete = async () => {
     try {
       const result = await complete.mutateAsync(task);
-      showMessage('Gata!', `Streak: ${result.streak} ${result.streak === 1 ? 'zi' : 'zile'} · ${result.points} puncte`);
+      showMessage('Gata!', `Streak: ${pluralDays(result.streak)} · ${pluralPoints(result.points)}`);
     } catch (error) {
       showMessage('Nu s-a putut confirma', errorMessage(error));
     }

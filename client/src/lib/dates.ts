@@ -31,6 +31,21 @@ export function formatTimestamp(value: string): string {
   return day === localDate() ? time : `${friendlyDate(day)} · ${time}`;
 }
 
+/**
+ * Plural în română: „1 zi”, „5 zile”, „20 de zile”, „101 zile”.
+ * „de” apare când ultimele două cifre sunt 00 sau 20–99 (în afară de 0).
+ */
+export function plural(count: number, one: string, many: string): string {
+  if (count === 1) return `1 ${one}`;
+  const lastTwo = Math.abs(count) % 100;
+  const needsDe = count !== 0 && (lastTwo === 0 || lastTwo >= 20);
+  return `${count} ${needsDe ? 'de ' : ''}${many}`;
+}
+
 export function pluralDays(count: number): string {
-  return count === 1 ? '1 zi' : `${count} zile`;
+  return plural(count, 'zi', 'zile');
+}
+
+export function pluralPoints(count: number): string {
+  return plural(count, 'punct', 'puncte');
 }

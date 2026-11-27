@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# Cu `shell: bash` explicit, GitHub rulează pașii cu `-eo pipefail`: un test care eșuează într-un
+# `... | tee fisier.log` oprește job-ul (fără pipefail, tee ascundea codul de ieșire).
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -49,6 +55,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            e2e/ui/package-lock.json
       - name: Migrații SQL
         run: |
           for f in database/migrations/*.sql; do
@@ -72,9 +82,24 @@ jobs:
           echo "Serviciile nu au pornit"; tail -60 /tmp/user.log /tmp/task.log; exit 1
       - name: Teste API end-to-end
         run: USER_LOG=/tmp/user.log node e2e/api-smoke.mjs 2>&1 | tee /tmp/e2e.log
+      - name: Build web pentru testele UI (pe backend-ul local)
+        if: success() || failure()
+        working-directory: client
+        env:
+          EXPO_PUBLIC_USER_API: http://localhost:8081/api
+          EXPO_PUBLIC_TASK_API: http://localhost:8082/api
+        run: |
+          (npm ci && npx expo export -p web --output-dir /tmp/web-e2e) > /tmp/ui-build.log 2>&1 || (tail -60 /tmp/ui-build.log; exit 1)
+      - name: Teste UI end-to-end (Chrome headless, passkey virtual)
+        if: success() || failure()
+        run: |
+          npm ci --prefix e2e/ui > /tmp/ui-install.log 2>&1 || (tail -40 /tmp/ui-install.log; exit 1)
+          nohup node e2e/ui/serve-spa.mjs /tmp/web-e2e 5173 > /tmp/ui-serve.log 2>&1 &
+          for i in $(seq 1 20); do curl -fsS http://localhost:5173/ >/dev/null 2>&1 && break; sleep 0.5; done
+          USER_LOG=/tmp/user.log node e2e/ui/ui-smoke.mjs 2>&1 | tee /tmp/ui-e2e.log
       - name: Adnotări erori
         if: failure()
-        run: bash .github/scripts/annotate.sh backend /tmp/migrations.log /tmp/user-build.log /tmp/task-build.log /tmp/e2e.log /tmp/user.log /tmp/task.log
+        run: bash .github/scripts/annotate.sh backend /tmp/user-build.log /tmp/task-build.log /tmp/ui-build.log /tmp/migrations.log /tmp/user.log /tmp/task.log
 
   docker:
     name: Docker (ca pe Render free)

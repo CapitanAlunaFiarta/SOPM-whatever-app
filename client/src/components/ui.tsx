@@ -89,6 +89,7 @@ export function Button({ title, onPress, variant = 'primary', icon, loading, dis
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={title}
       accessibilityState={{ disabled: inactive }}
       onPress={inactive ? undefined : onPress}
       style={({ pressed }) => [
@@ -123,6 +124,7 @@ export function TextField({ label, error, style, ...props }: TextInputProps & { 
       <TextInput
         placeholderTextColor={colors.faint}
         style={[styles.input, props.multiline && styles.inputMultiline, error ? { borderColor: colors.red } : null, style]}
+        accessibilityLabel={label ?? props.placeholder}
         {...props}
       />
       {error ? <Text style={styles.fieldError}>{error}</Text> : null}
@@ -152,7 +154,8 @@ export function ToggleRow({ label, description, value, onChange, icon }: {
   label: string; description?: string; value: boolean; onChange: (value: boolean) => void; icon?: IconName;
 }) {
   return (
-    <Pressable onPress={() => onChange(!value)} style={styles.toggleRow} accessibilityRole="switch" accessibilityState={{ checked: value }}>
+    <Pressable onPress={() => onChange(!value)} style={styles.toggleRow} accessibilityRole="switch"
+      accessibilityLabel={label} accessibilityState={{ checked: value }}>
       {icon ? <Ionicons name={icon} size={20} color={value ? colors.cyan : colors.faint} /> : null}
       <View style={{ flex: 1 }}>
         <Text style={styles.toggleLabel}>{label}</Text>

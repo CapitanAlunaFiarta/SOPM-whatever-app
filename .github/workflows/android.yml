@@ -1,0 +1,82 @@
+name: Android APK
+
+# Construiește aplicația Android direct din client/ (expo prebuild + Gradle), fără cont Expo.
+# Pe pull request: doar verifică build-ul și păstrează APK-ul ca artefact.
+# Pe main: publică APK-ul în GitHub Releases; ultimul se descarcă mereu de la
+# https://github.com/<owner>/<repo>/releases/latest/download/whatever.apk
+on:
+  push:
+    branches: [main]
+    paths: ['client/**', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['client/**', '.github/workflows/android.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: client
+
+jobs:
+  apk:
+    name: Android APK (build nativ)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
+      # Opțional: secret de repository; fără el aplicația merge, dar fără hartă pe Android.
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: npm ci
+        run: npm ci > /tmp/apk-install.log 2>&1 || (tail -60 /tmp/apk-install.log; exit 1)
+      - name: Proiectul Android (expo prebuild)
+        run: npx expo prebuild -p android --no-install > /tmp/apk-prebuild.log 2>&1 || (tail -80 /tmp/apk-prebuild.log; exit 1)
+      - name: Build APK (release)
+        working-directory: client/android
+        run: |
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a \
+            > /tmp/apk-gradle.log 2>&1 || (grep -E "FAILURE|What went wrong|error:|e: " -A6 /tmp/apk-gradle.log | head -80; tail -60 /tmp/apk-gradle.log; exit 1)
+      - name: APK
+        run: |
+          mkdir -p /tmp/apk
+          cp android/app/build/outputs/apk/release/app-release.apk /tmp/apk/whatever.apk
+          size=$(du -h /tmp/apk/whatever.apk | cut -f1)
+          maps=$([ -n "$GOOGLE_MAPS_API_KEY" ] && echo "cu hartă" || echo "fără cheie Google Maps")
+          echo "::notice title=APK::whatever.apk ${size}, versionCode ${ANDROID_VERSION_CODE}, ${maps}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whatever-android-apk
+          path: /tmp/apk/whatever.apk
+          retention-days: 14
+      - name: Publică în GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./app.json').expo.version")
+          tag="android-v${version}-${ANDROID_VERSION_CODE}"
+          gh release create "$tag" /tmp/apk/whatever.apk --target "$GITHUB_SHA" --latest \
+            --title "Whatever pentru Android ${version} (build ${ANDROID_VERSION_CODE})" \
+            --notes "APK pentru instalare directă pe Android. Pe telefon: deschide fișierul whatever.apk și permite instalarea din această sursă. Construit din ${GITHUB_SHA::7}."
+          echo "::notice title=Release::$tag publicat"
+      - name: Adnotări erori
+        if: failure()
+        working-directory: .
+        run: bash .github/scripts/annotate.sh android /tmp/apk-gradle.log /tmp/apk-prebuild.log /tmp/apk-install.log

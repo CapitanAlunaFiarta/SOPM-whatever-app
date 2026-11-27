@@ -38,7 +38,7 @@ export function TaskForm({ task }: { task?: Task }) {
   const friends = useFriends();
   const set = <K extends keyof TaskInput>(key: K, value: TaskInput[K]) => setInput((current) => ({ ...current, [key]: value }));
 
-  const useMyLocation = async () => {
+  const locateMe = async () => {
     setLocating(true);
     try {
       const position = await currentPosition();
@@ -90,7 +90,13 @@ export function TaskForm({ task }: { task?: Task }) {
           value={input.requiresBiometrics} onChange={(value) => set('requiresBiometrics', value)} />
         <ToggleRow icon="location-outline" label="Confirmare în locație"
           description="Poți confirma doar când ești în raza aleasă."
-          value={input.requiresLocation} onChange={(value) => set('requiresLocation', value)} />
+          value={input.requiresLocation} onChange={(value) => {
+            set('requiresLocation', value);
+            // Pinul pornește de la locația curentă, dacă nu a fost deja ales.
+            if (value && input.latitude === DEFAULT_COORDS.latitude && input.longitude === DEFAULT_COORDS.longitude) {
+              void locateMe();
+            }
+          }} />
         {input.requiresLocation && (
           <View style={{ gap: 10 }}>
             <LocationPicker value={{ latitude: input.latitude, longitude: input.longitude }} radius={input.radius}
@@ -99,7 +105,7 @@ export function TaskForm({ task }: { task?: Task }) {
               <Text style={{ color: colors.muted, fontSize: 12.5 }}>
                 {input.latitude.toFixed(5)}, {input.longitude.toFixed(5)}
               </Text>
-              <Button compact variant="secondary" title="Locația mea" icon="locate" loading={locating} onPress={useMyLocation} />
+              <Button compact variant="secondary" title="Locația mea" icon="locate" loading={locating} onPress={locateMe} />
             </Row>
             <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>Raza (metri)</Text>
             <ChipGroup options={radiusOptions} value={String(input.radius)} onChange={(value) => set('radius', Number(value))} />
