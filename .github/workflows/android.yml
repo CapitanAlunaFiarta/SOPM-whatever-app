@@ -62,7 +62,14 @@ jobs:
           size=$(du -h /tmp/apk/whatever.apk | cut -f1)
           # Harta pe Android e Leaflet într-un WebView; react-native-maps nu trebuie să ajungă în APK.
           linked=$(node -e "try { const j = require('./android/build/generated/autolinking/autolinking.json'); console.log(Object.keys(j.dependencies || {}).filter((d) => /maps|webview/.test(d)).join(' ') || '-') } catch (e) { console.log('n/a') }")
-          echo "::notice title=APK::whatever.apk ${size}, versionCode ${ANDROID_VERSION_CODE}, module hartă: ${linked}"
+          # Modulul Kotlin pentru focus (client/modules/focus-guard) se leagă automat; dacă lipsește, butonul Focus
+          # dispare fără niciun mesaj, deci build-ul pică.
+          # (fără pipe: cu pipefail, `grep -q` care iese devreme ar face `unzip` să pice cu SIGPIPE)
+          unzip -p /tmp/apk/whatever.apk 'classes*.dex' > /tmp/apk-classes.dex
+          if ! grep -aq 'FocusGuard' /tmp/apk-classes.dex; then
+            echo "::error title=APK::Modulul nativ focus-guard lipsește din APK"; exit 1
+          fi
+          echo "::notice title=APK::whatever.apk ${size}, versionCode ${ANDROID_VERSION_CODE}, module hartă: ${linked}, focus-guard inclus"
       - uses: actions/upload-artifact@v4
         with:
           name: whatever-android-apk

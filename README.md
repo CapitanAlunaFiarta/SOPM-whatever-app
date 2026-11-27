@@ -149,5 +149,5 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
   schimbarea limbii, resetare parolă cu codul din email, panoul de admin.
 - **Aplicația Expo**: TypeScript, ESLint, teste jest (inclusiv compatibilitatea semnăturii Ed25519 a telefonului cu
   verificarea din user-service), build-ul web pentru Netlify și bundle-urile JavaScript pentru Android și iOS.
-- **Android APK** (`android.yml`): build-ul nativ complet (inclusiv modulul Kotlin pentru focus), la fiecare schimbare
-  în `client/`. Dacă Maven Central sau Google Maven răspund cu 429/5xx, build-ul se reîncearcă o dată după 90 s.
+- **Android APK** (`android.yml`): build-ul nativ complet, la fiecare schimbare în `client/`; pică dacă modulul Kotlin
+  pentru focus nu a ajuns în APK. Dacă Maven Central sau Google Maven răspund cu 429/5xx, build-ul se reîncearcă o dată după 90 s.
