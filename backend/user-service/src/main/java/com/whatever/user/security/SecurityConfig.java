@@ -1,0 +1,93 @@
+package com.whatever.user.security;
+
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * Toate rutele sunt protejate implicit; doar cele listate aici sunt publice.
+ * Rutele /api/admin/** cer rolul ADMIN.
+ */
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService) throws Exception {
+        http.csrf(AbstractHttpConfigurer::disable)
+                .cors(Customizer.withDefaults())
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/health", "/api/health/db", "/error").permitAll()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/users/login",
+                                "/api/users/register",
+                                "/api/users/refresh",
+                                "/api/users/logout",
+                                "/api/users/password-reset/request",
+                                "/api/users/password-reset/confirm").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .anyRequest().authenticated())
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint((request, response, ex) ->
+                                writeError(response, 401, "Autentificare necesara."))
+                        .accessDeniedHandler((request, response, ex) ->
+                                writeError(response, 403, "Acces interzis.")))
+                .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(@Value("${app.cors-origin}") String origins,
+                                                    @Value("${app.cors-origin-patterns}") String patterns) {
+        List<String> allowed = new ArrayList<>(split(origins));
+        allowed.addAll(split(patterns));
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(allowed);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    static List<String> split(String value) {
+        if (value == null) return List.of();
+        return Arrays.stream(value.split(",")).map(String::trim).filter(item -> !item.isEmpty()).toList();
+    }
+
+    static void writeError(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.getWriter().write("{\"error\":\"" + message.replace("\"", "'") + "\"}");
+    }
+}
