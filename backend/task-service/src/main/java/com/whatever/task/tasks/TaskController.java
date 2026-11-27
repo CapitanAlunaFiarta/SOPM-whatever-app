@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -49,6 +50,12 @@ public class TaskController {
     @GetMapping
     public List<Map<String, Object>> list(@AuthenticationPrincipal AuthUser user) {
         return tasks.list(user);
+    }
+
+    /** Recap lunar pe categorii; month = "2026-11" (implicit luna curentă). */
+    @GetMapping("/recap")
+    public Map<String, Object> recap(@AuthenticationPrincipal AuthUser user, @RequestParam(required = false) String month) {
+        return tasks.recap(user, month);
     }
 
     @PostMapping

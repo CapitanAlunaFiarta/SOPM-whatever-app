@@ -1,3 +1,5 @@
+import { translate } from '../i18n/core';
+
 import { request } from './api';
 import { PASSKEY_DOMAIN } from './config';
 import { base64UrlToBytes, bytesToBase64Url } from './encoding';
@@ -23,10 +25,13 @@ function supported(): boolean {
 
 export async function getBiometricStatus(userId: number): Promise<BiometricStatus> {
   if (!supported()) {
-    return { available: false, enabled: false, label: 'Passkey', hint: 'Browserul nu suportă passkey-uri.' };
+    return { available: false, enabled: false, label: translate('passkey.label'), hint: translate('passkey.unsupported') };
   }
   if (!passkeyHostOk()) {
-    return { available: false, enabled: false, label: 'Passkey', hint: `Passkey-urile funcționează doar pe ${PASSKEY_DOMAIN}.` };
+    return {
+      available: false, enabled: false, label: translate('passkey.label'),
+      hint: translate('passkey.wrongHost', { domain: PASSKEY_DOMAIN }),
+    };
   }
   let enabled = false;
   try {
@@ -34,7 +39,7 @@ export async function getBiometricStatus(userId: number): Promise<BiometricStatu
   } catch {
     enabled = false;
   }
-  return { available: true, enabled, label: 'Passkey (amprentă, Face ID, Windows Hello)' };
+  return { available: true, enabled, label: translate('passkey.available') };
 }
 
 type CreationOptions = { publicKey: Record<string, any> };
@@ -85,16 +90,16 @@ function asBuffer(value: string): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-function translate(error: unknown): Error {
+function friendlyError(error: unknown): Error {
   if (error instanceof DOMException && error.name === 'NotAllowedError') {
-    return new Error('Confirmarea cu passkey a fost anulată sau a expirat.');
+    return new Error(translate('passkey.cancelled'));
   }
-  return error instanceof Error ? error : new Error('Passkey-ul nu a putut fi folosit.');
+  return error instanceof Error ? error : new Error(translate('passkey.failed'));
 }
 
 export async function enableBiometrics(userId: number): Promise<void> {
   const status = await getBiometricStatus(userId);
-  if (!status.available) throw new Error(status.hint ?? 'Passkey-urile nu sunt disponibile.');
+  if (!status.available) throw new Error(status.hint ?? translate('passkey.unavailable'));
   const { publicKey } = await request<CreationOptions>('user', '/users/webauthn/register/options', { method: 'POST' });
   try {
     const credential = (await navigator.credentials.create({
@@ -105,7 +110,7 @@ export async function enableBiometrics(userId: number): Promise<void> {
         excludeCredentials: (publicKey.excludeCredentials ?? []).map((item: any) => ({ ...item, id: asBuffer(item.id) })),
       } as PublicKeyCredentialCreationOptions,
     })) as PublicKeyCredential | null;
-    if (!credential) throw new Error('Passkey-ul nu a fost creat.');
+    if (!credential) throw new Error(translate('passkey.notCreated'));
     await request('user', '/users/webauthn/register/finish', { method: 'POST', body: { credentialJson: credentialJson(credential) } });
     try {
       window.localStorage.setItem(flagKey(userId), '1');
@@ -113,7 +118,7 @@ export async function enableBiometrics(userId: number): Promise<void> {
       // ignorăm
     }
   } catch (error) {
-    throw translate(error);
+    throw friendlyError(error);
   }
 }
 
@@ -127,7 +132,7 @@ export async function disableBiometrics(userId: number): Promise<void> {
 
 export async function biometricTokenForTask(userId: number, taskId: number): Promise<string> {
   const status = await getBiometricStatus(userId);
-  if (!status.available) throw new Error(status.hint ?? 'Passkey-urile nu sunt disponibile.');
+  if (!status.available) throw new Error(status.hint ?? translate('passkey.unavailable'));
   const { publicKey } = await request<RequestOptions>('user', '/users/webauthn/assertion/options', { method: 'POST' });
   try {
     const credential = (await navigator.credentials.get({
@@ -137,13 +142,13 @@ export async function biometricTokenForTask(userId: number, taskId: number): Pro
         allowCredentials: (publicKey.allowCredentials ?? []).map((item: any) => ({ ...item, id: asBuffer(item.id) })),
       } as PublicKeyCredentialRequestOptions,
     })) as PublicKeyCredential | null;
-    if (!credential) throw new Error('Confirmarea cu passkey a eșuat.');
+    if (!credential) throw new Error(translate('passkey.confirmFailed'));
     const result = await request<{ biometricToken: string }>('user', '/users/webauthn/assertion/finish', {
       method: 'POST',
       body: { credentialJson: credentialJson(credential), taskId },
     });
     return result.biometricToken;
   } catch (error) {
-    throw translate(error);
+    throw friendlyError(error);
   }
 }

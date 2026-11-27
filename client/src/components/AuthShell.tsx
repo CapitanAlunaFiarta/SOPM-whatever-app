@@ -2,10 +2,14 @@ import type { ReactNode } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useI18n } from '@/i18n';
+
+import { LanguagePicker } from './LanguagePicker';
 import { colors } from './theme';
 
-/** Cadrul ecranelor de autentificare: logo + card centrat. */
+/** Cadrul ecranelor de autentificare: logo + card centrat + alegerea limbii. */
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+  const { t } = useI18n();
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -14,13 +18,14 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
             <View style={styles.brand}>
               <Image source={require('@/assets/images/logo.png')} style={styles.logo} />
               <Text style={styles.name}>WHATEVER</Text>
-              <Text style={styles.tagline}>Planifică. Acționează. Progresează.</Text>
+              <Text style={styles.tagline}>{t('auth.tagline')}</Text>
             </View>
             <View style={styles.card}>
               <Text style={styles.title}>{title}</Text>
               {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
               {children}
             </View>
+            <LanguagePicker compact />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

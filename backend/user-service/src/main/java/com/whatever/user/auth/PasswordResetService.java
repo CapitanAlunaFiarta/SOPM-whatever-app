@@ -41,6 +41,11 @@ public class PasswordResetService {
     }
 
     public void request(String rawEmail, String rawUsername, String ip) {
+        request(rawEmail, rawUsername, ip, "ro");
+    }
+
+    /** language: limba aplicației la momentul cererii (ro, en, es) — emailul se trimite în aceeași limbă. */
+    public void request(String rawEmail, String rawUsername, String ip, String language) {
         String email = UserRepository.normalizeEmail(rawEmail);
         String username = rawUsername == null ? "" : rawUsername.trim().replaceFirst("^@", "");
         rateLimiter.check("reset-ip:" + ip, 10, Duration.ofHours(1));
@@ -55,13 +60,10 @@ public class PasswordResetService {
                         + "password_reset_expires_at = (now() AT TIME ZONE 'UTC') + INTERVAL '15 minutes' WHERE id = ?",
                 Tokens.sha256Hex(code), ids.get(0));
         String display = code.substring(0, 5) + "-" + code.substring(5);
-        String text = "Ai cerut resetarea parolei pentru contul Whatever.\n\n"
-                + "Codul tău: " + display + "\n\n"
-                + "Îl poți introduce în aplicație sau poți deschide direct:\n"
-                + publicUrl + "/reset?code=" + display + "\n\n"
-                + "Codul expiră în 15 minute. Dacă nu ai cerut tu resetarea, ignoră acest mesaj.";
+        String link = publicUrl + "/reset?code=" + display;
+        String[] message = resetEmail(language, display, link);
         try {
-            mail.send(email, "Whatever - resetare parolă", text);
+            mail.send(email, message[0], message[1]);
         } catch (MailService.MailDeliveryException e) {
             log.error("Emailul de resetare nu a putut fi trimis: {}", e.getMessage());
             db.update("UPDATE users SET password_reset_token = NULL, password_reset_expires_at = NULL WHERE id = ?",
@@ -82,5 +84,26 @@ public class PasswordResetService {
                 String.class, encoder.encode(newPassword), Tokens.sha256Hex(code));
         if (emails.isEmpty()) throw new ApiException(400, "Cod de resetare invalid sau expirat.");
         refreshTokens.revokeAll(emails.get(0));
+    }
+
+    /** {subiect, text} pentru emailul de resetare, în limba cerută. */
+    static String[] resetEmail(String language, String code, String link) {
+        return switch (language == null ? "ro" : language) {
+            case "en" -> new String[]{"Whatever - password reset",
+                    "You asked to reset the password of your Whatever account.\n\n"
+                            + "Your code: " + code + "\n\n"
+                            + "Enter it in the app or open this link:\n" + link + "\n\n"
+                            + "The code expires in 15 minutes. If you didn't ask for a reset, ignore this message."};
+            case "es" -> new String[]{"Whatever - restablecer contraseña",
+                    "Has pedido restablecer la contraseña de tu cuenta de Whatever.\n\n"
+                            + "Tu código: " + code + "\n\n"
+                            + "Introdúcelo en la aplicación o abre este enlace:\n" + link + "\n\n"
+                            + "El código caduca en 15 minutos. Si no lo pediste tú, ignora este mensaje."};
+            default -> new String[]{"Whatever - resetare parolă",
+                    "Ai cerut resetarea parolei pentru contul Whatever.\n\n"
+                            + "Codul tău: " + code + "\n\n"
+                            + "Îl poți introduce în aplicație sau poți deschide direct:\n" + link + "\n\n"
+                            + "Codul expiră în 15 minute. Dacă nu ai cerut tu resetarea, ignoră acest mesaj."};
+        };
     }
 }

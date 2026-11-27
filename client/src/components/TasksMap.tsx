@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
-import { STATUS_LABELS, type Coordinates, type Task } from '@/lib/types';
+import { useI18n } from '@/i18n';
+import type { Coordinates, Task } from '@/lib/types';
 
 import { LeafletMap } from './leaflet/LeafletMap';
 import { colors } from './theme';
@@ -14,6 +15,7 @@ export function TasksMap({ tasks, center }: {
   center: Coordinates;
   onSelect?: (task: Task) => void;
 }) {
+  const { t } = useI18n();
   return (
     <View style={styles.wrapper}>
       <LeafletMap
@@ -24,7 +26,7 @@ export function TasksMap({ tasks, center }: {
           tasks: tasks.map((task) => ({
             id: task.id,
             title: task.title,
-            label: `${STATUS_LABELS[task.status]} · raza ${task.radius} m`,
+            label: t('map.taskLabel', { status: t(`status.${task.status}`), radius: task.radius }),
             latitude: task.latitude,
             longitude: task.longitude,
             radius: task.radius,

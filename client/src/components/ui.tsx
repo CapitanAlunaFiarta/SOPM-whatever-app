@@ -6,6 +6,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useI18n } from '@/i18n';
+
 import { colors, MAX_CONTENT_WIDTH, radius, toneColor, type Tone } from './theme';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -178,13 +180,14 @@ export function Badge({ text, tone = 'neutral', icon }: { text: string; tone?: T
 }
 
 export function Banner({ text, tone = 'danger', onClose }: { text: string; tone?: 'danger' | 'success' | 'info'; onClose?: () => void }) {
+  const { t } = useI18n();
   const color = tone === 'danger' ? colors.red : tone === 'success' ? colors.green : colors.cyan;
   return (
     <View style={[styles.banner, { borderColor: `${color}66`, backgroundColor: `${color}1F` }]}>
       <Ionicons name={tone === 'danger' ? 'alert-circle' : tone === 'success' ? 'checkmark-circle' : 'information-circle'}
         size={18} color={color} />
       <Text style={[styles.bannerText, { color: colors.text }]}>{text}</Text>
-      {onClose ? <IconButton icon="close" label="Închide" onPress={onClose} /> : null}
+      {onClose ? <IconButton icon="close" label={t('common.close')} onPress={onClose} /> : null}
     </View>
   );
 }

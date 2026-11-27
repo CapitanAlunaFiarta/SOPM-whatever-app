@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { translate } from '../i18n/core';
+
 import { request, saveSession } from './api';
 import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
 import type {
-  AdminUser, ChatMessage, CompletionResult, Friend, LeaderboardEntry, Session, Task, TaskInput, User,
+  AdminUser, ChatMessage, CompletionResult, Friend, LeaderboardEntry, Recap, Session, Task, TaskInput, User,
 } from './types';
 
 export const keys = {
@@ -15,6 +17,7 @@ export const keys = {
   friends: ['friends'] as const,
   leaderboard: ['leaderboard'] as const,
   adminUsers: ['admin-users'] as const,
+  recap: ['recap'] as const,
 };
 
 export function useMe() {
@@ -36,6 +39,16 @@ export function useTasks() {
     queryKey: keys.tasks,
     enabled: status === 'signedIn',
     queryFn: () => request<Task[]>('task', '/tasks'),
+  });
+}
+
+/** Recap-ul unei luni (YYYY-MM): câte activități ai finalizat în fiecare categorie. */
+export function useRecap(month: string) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: [...keys.recap, month],
+    enabled: status === 'signedIn',
+    queryFn: () => request<Recap>('task', `/tasks/recap?month=${encodeURIComponent(month)}`),
   });
 }
 
@@ -75,13 +88,14 @@ export function useAdminUsers(enabled: boolean) {
   });
 }
 
-/** Invalidează datele afectate de o acțiune pe task-uri (listă, profil, clasament). */
+/** Invalidează datele afectate de o acțiune pe task-uri (listă, profil, clasament, recap). */
 function useRefreshAfterTaskChange() {
   const client = useQueryClient();
   return () => Promise.all([
     client.invalidateQueries({ queryKey: keys.tasks }),
     client.invalidateQueries({ queryKey: keys.me }),
     client.invalidateQueries({ queryKey: keys.leaderboard }),
+    client.invalidateQueries({ queryKey: keys.recap }),
   ]);
 }
 
@@ -99,7 +113,7 @@ export function useCompleteTask() {
   const { user, updateUser } = useAuth();
   return useMutation({
     mutationFn: async (task: Task) => {
-      if (!user) throw new Error('Autentifică-te din nou.');
+      if (!user) throw new Error(translate('auth.signInAgain'));
       const body: Record<string, unknown> = {};
       if (task.requiresLocation) Object.assign(body, await currentPosition());
       if (task.requiresBiometrics) body.biometricToken = await biometricTokenForTask(user.id, task.id);

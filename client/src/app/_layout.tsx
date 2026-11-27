@@ -7,6 +7,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { colors } from '@/components/theme';
 import { AppText, Button, IconButton, Loading } from '@/components/ui';
+import { I18nProvider, useI18n } from '@/i18n';
 import { AuthProvider, useAuth } from '@/lib/auth';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -17,14 +18,19 @@ function closeModal() {
   else router.replace('/tasks');
 }
 
+function CloseButton() {
+  const { t } = useI18n();
+  return (
+    <View style={{ marginRight: 8 }}>
+      <IconButton icon="close" label={t('common.close')} onPress={closeModal} />
+    </View>
+  );
+}
+
 const modalOptions = {
   presentation: 'modal' as const,
   headerShown: true,
-  headerLeft: () => (
-    <View style={{ marginRight: 8 }}>
-      <IconButton icon="close" label="Închide" onPress={closeModal} />
-    </View>
-  ),
+  headerLeft: () => <CloseButton />,
 };
 
 const navigationTheme = {
@@ -44,28 +50,32 @@ export default function RootLayout() {
     defaultOptions: { queries: { retry: 1, staleTime: 15_000, refetchOnWindowFocus: true } },
   }));
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ThemeProvider value={navigationTheme}>
-          <StatusBar style="light" />
-          <RootNavigator />
-        </ThemeProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <I18nProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ThemeProvider value={navigationTheme}>
+            <StatusBar style="light" />
+            <RootNavigator />
+          </ThemeProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </I18nProvider>
   );
 }
 
 function RootNavigator() {
   const { status, message, retry, signOut } = useAuth();
+  const { t, ready } = useI18n();
   // Cât timp sesiunea se reface (loading/offline) ambele grupuri rămân accesibile, ca un link
   // direct (ex. /task/12 sau un refresh în browser) să nu fie redirecționat către „Acasă”.
   // Ecranele rămân acoperite de overlay până se știe dacă utilizatorul e autentificat.
   const appAvailable = status !== 'signedOut';
   const authAvailable = status !== 'signedIn';
 
+  // Splash-ul rămâne până se știu și sesiunea, și limba aleasă (citită din SecureStore pe telefon).
   useEffect(() => {
-    if (status !== 'loading') SplashScreen.hideAsync().catch(() => undefined);
-  }, [status]);
+    if (status !== 'loading' && ready) SplashScreen.hideAsync().catch(() => undefined);
+  }, [status, ready]);
 
   return (
     <View style={styles.root}>
@@ -78,8 +88,9 @@ function RootNavigator() {
       }}>
         <Stack.Protected guard={appAvailable}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="task/new" options={{ ...modalOptions, title: 'Activitate nouă' }} />
-          <Stack.Screen name="task/[id]" options={{ ...modalOptions, title: 'Editează activitatea' }} />
+          <Stack.Screen name="task/new" options={{ ...modalOptions, title: t('task.newTitle') }} />
+          <Stack.Screen name="task/[id]" options={{ ...modalOptions, title: t('task.editTitle') }} />
+          <Stack.Screen name="recap" options={{ ...modalOptions, title: t('recap.title') }} />
         </Stack.Protected>
         <Stack.Protected guard={authAvailable}>
           <Stack.Screen name="login" />
@@ -91,15 +102,15 @@ function RootNavigator() {
 
       {status === 'loading' && (
         <View style={styles.overlay}>
-          <Loading text="Se reface sesiunea… Dacă serverul a stat nefolosit, pornirea durează câteva secunde." />
+          <Loading text={t('root.restoring')} />
         </View>
       )}
       {status === 'offline' && (
         <View style={[styles.overlay, styles.offline]}>
-          <AppText variant="heading">Serverul nu răspunde</AppText>
-          <AppText variant="muted" style={{ textAlign: 'center' }}>{message ?? 'Verifică conexiunea la internet.'}</AppText>
-          <Button title="Încearcă din nou" icon="refresh" onPress={retry} />
-          <Button title="Deconectează-te" variant="ghost" onPress={signOut} />
+          <AppText variant="heading">{t('root.offlineTitle')}</AppText>
+          <AppText variant="muted" style={{ textAlign: 'center' }}>{message ?? t('root.checkConnection')}</AppText>
+          <Button title={t('common.retry')} icon="refresh" onPress={retry} />
+          <Button title={t('common.signOut')} variant="ghost" onPress={signOut} />
         </View>
       )}
     </View>

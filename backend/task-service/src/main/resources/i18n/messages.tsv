@@ -1,0 +1,35 @@
+# Traduceri: română (textul din cod) <TAB> engleză <TAB> spaniolă. {0}, {1} = valori.
+Autentificare necesară.	Authentication required.	Se requiere autenticación.
+Acces interzis.	Access denied.	Acceso denegado.
+Sesiune invalidă.	Invalid session.	Sesión no válida.
+Date invalide.	Invalid data.	Datos no válidos.
+Cerere invalidă.	Invalid request.	Solicitud no válida.
+Metodă HTTP nepermisă.	HTTP method not allowed.	Método HTTP no permitido.
+Resursa nu există.	The resource doesn't exist.	El recurso no existe.
+Înregistrarea există deja.	This record already exists.	El registro ya existe.
+Baza de date nu răspunde momentan. Încearcă din nou.	The database isn't responding right now. Try again.	La base de datos no responde en este momento. Inténtalo de nuevo.
+A apărut o eroare internă.	An internal error occurred.	Se produjo un error interno.
+Prea multe încercări. Încearcă din nou peste câteva minute.	Too many attempts. Try again in a few minutes.	Demasiados intentos. Inténtalo de nuevo en unos minutos.
+Alege locația activității pe hartă.	Pick the activity's location on the map.	Elige la ubicación de la actividad en el mapa.
+Categorie invalidă.	Invalid category.	Categoría no válida.
+Ești la {0} m de locația activității (raza permisă: {1} m).	You are {0} m from the activity's location (allowed radius: {1} m).	Estás a {0} m de la ubicación de la actividad (radio permitido: {1} m).
+Locația pare simulată. Oprește aplicațiile de locație falsă și încearcă din nou.	Your location looks simulated. Turn off fake-location apps and try again.	Tu ubicación parece simulada. Desactiva las aplicaciones de ubicación falsa e inténtalo de nuevo.
+Locația ta este necesară pentru această activitate.	Your location is required for this activity.	Tu ubicación es necesaria para esta actividad.
+Nu mai ai freeze-uri luna aceasta.	You have no freezes left this month.	No te quedan freezes este mes.
+Poți partaja activități doar cu prietenii tăi (adaugă-i din Comunitate).	You can only share activities with your friends (add them in Community).	Solo puedes compartir actividades con tus amigos (agrégalos en Comunidad).
+Prioritate invalidă. Alege: Low, Medium sau High.	Invalid priority. Choose Low, Medium or High.	Prioridad no válida. Elige Low, Medium o High.
+Verificarea biometrică este necesară.	Biometric verification is required.	Se requiere verificación biométrica.
+Activitatea nu există.	This activity doesn't exist.	La actividad no existe.
+Activitatea a fost anulată.	This activity was canceled.	La actividad fue cancelada.
+Activitatea este deja finalizată.	This activity is already completed.	La actividad ya está completada.
+Ai finalizat deja activitatea azi.	You've already completed this activity today.	Ya completaste esta actividad hoy.
+Doar activitățile active pot fi anulate.	Only active activities can be canceled.	Solo se pueden cancelar actividades activas.
+Doar activitățile active pot fi editate.	Only active activities can be edited.	Solo se pueden editar actividades activas.
+Doar activitățile restante pot fi înghețate.	Only overdue activities can be frozen.	Solo se pueden congelar actividades atrasadas.
+Lună invalidă.	Invalid month.	Mes no válido.
+Titlul este obligatoriu.	The title is required.	El título es obligatorio.
+Titlul e prea lung.	The title is too long.	El título es demasiado largo.
+Latitudine invalidă.	Invalid latitude.	Latitud no válida.
+Longitudine invalidă.	Invalid longitude.	Longitud no válida.
+Raza trebuie să fie între 10 și 10000 m.	The radius must be between 10 and 10000 m.	El radio debe estar entre 10 y 10000 m.
+Scadența este obligatorie.	The due date is required.	La fecha límite es obligatoria.

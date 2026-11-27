@@ -23,6 +23,14 @@ streak zilnic, freeze-uri lunare, prieteni, clasament, chat global și panou de 
   - o semnătură Ed25519 făcută de telefon cu o cheie păstrată în Keychain/Keystore și deblocată cu amprentă/Face ID (aplicația nativă).
   Un câmp boolean trimis de client nu mai este acceptat.
 - Partajarea unei activități se face doar cu prietenii. Emailurile altor utilizatori nu sunt expuse niciodată (prieteni, clasament, activități partajate).
+- **Categorii**: `SPORT` (activitate fizică), `STUDY` (facultate/studiu), `CHORES` (treburi, comisioane — implicită), `ENTERTAINMENT`.
+  Serverul păstrează cheile, aplicația afișează numele traduse. Valorile vechi sunt acceptate și mapate
+  (Sport/Sănătate → SPORT, Facultate/Proiect Echipă → STUDY, restul → CHORES; migrarea `003`).
+- **Recap lunar** (`GET /api/tasks/recap?month=YYYY-MM`): câte activități ai finalizat în fiecare categorie. Categoria se
+  salvează la finalizare, deci recap-ul rămâne corect și după ștergerea activității.
+- **Limbi**: română, engleză, spaniolă. Aplicația pornește în limba telefonului/browserului (altfel engleză) și ține minte
+  alegerea din Profil sau de pe ecranele de autentificare. Trimite `Accept-Language`, iar serverele traduc mesajele de eroare
+  (`i18n/messages.tsv` din fiecare serviciu) și emailul de resetare a parolei.
 
 ## Pornire locală
 

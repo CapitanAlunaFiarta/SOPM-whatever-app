@@ -13,7 +13,9 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -162,9 +164,10 @@ public class TaskService {
         }
 
         db.update("INSERT INTO task_completions(task_id, user_email, completed_on, latitude, longitude, "
-                        + "verified_location, verified_biometric) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        + "verified_location, verified_biometric, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 id, user.email(), Date.valueOf(today), new SqlParameterValue(Types.DOUBLE, request.latitude()),
-                new SqlParameterValue(Types.DOUBLE, request.longitude()), locationVerified, biometricVerified);
+                new SqlParameterValue(Types.DOUBLE, request.longitude()), locationVerified, biometricVerified,
+                TaskRules.storedCategory(task.get("category")));
         if (Boolean.TRUE.equals(task.get("is_recurring"))) {
             db.update("UPDATE tasks SET streak_count = streak_count + 1, status = 'Upcoming', due_date = ?, updated_at = now() "
                     + "WHERE id = ?", Date.valueOf(today.plusDays(1)), id);
@@ -189,6 +192,38 @@ public class TaskService {
         return response;
     }
 
+    /**
+     * Recap lunar: câte activități ai finalizat în fiecare categorie. Se bazează pe task_completions,
+     * deci include și activitățile șterse între timp (categoria e salvată la finalizare).
+     */
+    public Map<String, Object> recap(AuthUser user, String month) {
+        YearMonth selected;
+        try {
+            selected = month == null || month.isBlank() ? YearMonth.from(today()) : YearMonth.parse(month.trim());
+        } catch (DateTimeParseException e) {
+            throw new ApiException(400, "Lună invalidă.");
+        }
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        TaskRules.CATEGORIES.forEach(key -> counts.put(key, 0));
+        db.queryForList("SELECT COALESCE(c.category, t.category) AS category, count(*) AS total FROM task_completions c "
+                        + "LEFT JOIN tasks t ON t.id = c.task_id WHERE c.user_email = ? AND c.completed_on >= ? "
+                        + "AND c.completed_on < ? GROUP BY 1",
+                user.email(), Date.valueOf(selected.atDay(1)), Date.valueOf(selected.plusMonths(1).atDay(1)))
+                .forEach(row -> counts.merge(TaskRules.storedCategory(row.get("category")), intValue(row.get("total")),
+                        Integer::sum));
+        Integer previous = db.queryForObject("SELECT count(*) FROM task_completions WHERE user_email = ? "
+                        + "AND completed_on >= ? AND completed_on < ?", Integer.class, user.email(),
+                Date.valueOf(selected.minusMonths(1).atDay(1)), Date.valueOf(selected.atDay(1)));
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("month", selected.toString());
+        response.put("total", counts.values().stream().mapToInt(Integer::intValue).sum());
+        response.put("previousTotal", previous == null ? 0 : previous);
+        response.put("categories", counts.entrySet().stream()
+                .map(entry -> Map.<String, Object>of("category", entry.getKey(), "count", entry.getValue())).toList());
+        return response;
+    }
+
     private Map<String, Object> find(long id, AuthUser user) {
         List<Map<String, Object>> rows = db.queryForList(TASK_SELECT + "WHERE t.id = ?", id);
         if (rows.isEmpty()) throw new ApiException(404, "Activitatea nu există.");
@@ -204,7 +239,7 @@ public class TaskService {
 
     private Map<String, Object> lockUser(String email) {
         List<Map<String, Object>> rows = db.queryForList("SELECT * FROM users WHERE email = ? FOR UPDATE", email);
-        if (rows.isEmpty()) throw new ApiException(401, "Sesiune invalida.");
+        if (rows.isEmpty()) throw new ApiException(401, "Sesiune invalidă.");
         return rows.get(0);
     }
 
@@ -236,7 +271,7 @@ public class TaskService {
         Map<String, Object> task = new LinkedHashMap<>();
         task.put("id", row.get("id"));
         task.put("title", row.get("title"));
-        task.put("category", row.get("category"));
+        task.put("category", TaskRules.storedCategory(row.get("category")));
         task.put("priority", row.get("priority"));
         task.put("status", status);
         task.put("isRecurring", Boolean.TRUE.equals(row.get("is_recurring")));

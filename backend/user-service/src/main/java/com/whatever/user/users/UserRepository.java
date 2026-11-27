@@ -47,7 +47,7 @@ public class UserRepository {
     }
 
     public Map<String, Object> require(String email) {
-        return findByEmail(email).orElseThrow(() -> new ApiException(401, "Sesiune invalida."));
+        return findByEmail(email).orElseThrow(() -> new ApiException(401, "Sesiune invalidă."));
     }
 
     /** Streak-ul afișat: dacă ultima zi cu activitate e mai veche decât ieri, streak-ul s-a rupt. */

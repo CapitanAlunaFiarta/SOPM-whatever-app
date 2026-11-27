@@ -1,0 +1,52 @@
+# Traduceri: română (textul din cod) <TAB> engleză <TAB> spaniolă. {0}, {1} = valori.
+Autentificare necesară.	Authentication required.	Se requiere autenticación.
+Acces interzis.	Access denied.	Acceso denegado.
+Sesiune invalidă.	Invalid session.	Sesión no válida.
+Date invalide.	Invalid data.	Datos no válidos.
+Cerere invalidă.	Invalid request.	Solicitud no válida.
+Metodă HTTP nepermisă.	HTTP method not allowed.	Método HTTP no permitido.
+Resursa nu există.	The resource doesn't exist.	El recurso no existe.
+Înregistrarea există deja.	This record already exists.	El registro ya existe.
+Baza de date nu răspunde momentan. Încearcă din nou.	The database isn't responding right now. Try again.	La base de datos no responde en este momento. Inténtalo de nuevo.
+A apărut o eroare internă.	An internal error occurred.	Se produjo un error interno.
+Prea multe încercări. Încearcă din nou peste câteva minute.	Too many attempts. Try again in a few minutes.	Demasiados intentos. Inténtalo de nuevo en unos minutos.
+Administratorul nu se poate șterge.	The administrator can't be deleted.	El administrador no se puede eliminar.
+Cererea passkey a expirat. Încearcă din nou.	The passkey request expired. Try again.	La solicitud de passkey caducó. Inténtalo de nuevo.
+Cheie publică invalidă.	Invalid public key.	Clave pública no válida.
+Semnătură invalidă.	Invalid signature.	Firma no válida.
+Cod de resetare invalid sau expirat.	Invalid or expired reset code.	Código de restablecimiento no válido o caducado.
+Confirmarea a expirat. Încearcă din nou.	The confirmation expired. Try again.	La confirmación caducó. Inténtalo de nuevo.
+Identificator de telefon invalid.	Invalid phone identifier.	Identificador de teléfono no válido.
+Nu ai niciun passkey pe acest cont. Activează-l din Profil.	There's no passkey on this account. Enable it in Profile.	No hay ningún passkey en esta cuenta. Actívalo en Perfil.
+Nu te poți adăuga singur.	You can't add yourself.	No puedes agregarte a ti mismo.
+Parola actuală este incorectă.	The current password is incorrect.	La contraseña actual es incorrecta.
+Înregistrarea passkey a eșuat.	Passkey registration failed.	El registro del passkey falló.
+Email sau parolă incorectă.	Incorrect email or password.	Correo o contraseña incorrectos.
+Verificarea biometrică a eșuat.	Biometric verification failed.	La verificación biométrica falló.
+Telefonul nu mai este înregistrat. Activează din nou biometria din Profil.	This phone is no longer registered. Enable biometrics again in Profile.	Este teléfono ya no está registrado. Vuelve a activar la biometría en Perfil.
+Telefonul nu mai este înregistrat.	This phone is no longer registered.	Este teléfono ya no está registrado.
+Utilizator negăsit.	User not found.	Usuario no encontrado.
+Utilizatorul nu există.	This user doesn't exist.	El usuario no existe.
+Acest passkey aparține altui cont.	This passkey belongs to another account.	Este passkey pertenece a otra cuenta.
+Emailul sau username-ul există deja.	The email or username already exists.	El correo o el nombre de usuario ya existe.
+Nu s-au putut genera opțiunile passkey.	Couldn't create the passkey options.	No se pudieron generar las opciones del passkey.
+Emailul de resetare nu a putut fi trimis. Încearcă mai târziu sau cere administratorului să-ți reseteze parola.	The reset email couldn't be sent. Try again later or ask the administrator to reset your password.	No se pudo enviar el correo de restablecimiento. Inténtalo más tarde o pide al administrador que restablezca tu contraseña.
+Codul este obligatoriu.	The code is required.	El código es obligatorio.
+Email invalid.	Invalid email.	Correo no válido.
+Emailul este obligatoriu.	The email is required.	El correo es obligatorio.
+Lipsește cheia publică.	The public key is missing.	Falta la clave pública.
+Lipsește refresh token-ul.	The refresh token is missing.	Falta el refresh token.
+Lipsește semnătura.	The signature is missing.	Falta la firma.
+Lipsește telefonul.	The phone is missing.	Falta el teléfono.
+Mesajul e prea lung.	The message is too long.	El mensaje es demasiado largo.
+Mesajul este gol.	The message is empty.	El mensaje está vacío.
+Numele este obligatoriu.	The name is required.	El nombre es obligatorio.
+Numele trebuie să aibă 2-120 caractere.	The name must have 2-120 characters.	El nombre debe tener entre 2 y 120 caracteres.
+Parola actuală este obligatorie.	The current password is required.	La contraseña actual es obligatoria.
+Parola este obligatorie.	The password is required.	La contraseña es obligatoria.
+Parola nouă este obligatorie.	The new password is required.	La contraseña nueva es obligatoria.
+Parola nouă trebuie să aibă cel puțin 12 caractere.	The new password must have at least 12 characters.	La contraseña nueva debe tener al menos 12 caracteres.
+Parola trebuie să aibă cel puțin 12 caractere.	The password must have at least 12 characters.	La contraseña debe tener al menos 12 caracteres.
+Scrie username-ul.	Type the username.	Escribe el nombre de usuario.
+Username-ul este obligatoriu.	The username is required.	El nombre de usuario es obligatorio.
+Username-ul poate avea 3-30 caractere: litere, cifre, punct, _ sau -.	The username can have 3-30 characters: letters, digits, dot, _ or -.	El nombre de usuario puede tener 3-30 caracteres: letras, números, punto, _ o -.

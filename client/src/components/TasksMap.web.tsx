@@ -3,7 +3,8 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useEffect, useRef } from 'react';
 
-import { STATUS_LABELS, type Coordinates, type Task } from '@/lib/types';
+import { useI18n } from '@/i18n';
+import type { Coordinates, Task } from '@/lib/types';
 
 import { pinIcon } from './LocationPicker.web';
 import { colors } from './theme';
@@ -14,6 +15,7 @@ function escapeHtml(text: string): string {
 
 /** Harta activităților cu locație în browser (Leaflet). */
 export function TasksMap({ tasks, center }: { tasks: Task[]; center: Coordinates; onSelect?: (task: Task) => void }) {
+  const { t } = useI18n();
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
@@ -42,11 +44,13 @@ export function TasksMap({ tasks, center }: { tasks: Task[]; center: Coordinates
       bounds.push(position);
       L.circle(position, { color: colors.cyan, fillOpacity: 0.15, radius: task.radius }).addTo(group);
       L.marker(position, { icon: pinIcon })
-        .bindPopup(`<b>${escapeHtml(task.title)}</b><br/>${STATUS_LABELS[task.status]} · raza ${task.radius} m`)
+        .bindPopup(`<b>${escapeHtml(task.title)}</b><br/>${escapeHtml(t('map.taskLabel', {
+          status: t(`status.${task.status}`), radius: task.radius,
+        }))}`)
         .addTo(group);
     });
     if (bounds.length > 0) map.current.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 16 });
-  }, [tasks]);
+  }, [tasks, t]);
 
   return <div ref={container} style={{ flex: 1, minHeight: 360, borderRadius: 16, overflow: 'hidden', border: `1px solid ${colors.border}`, zIndex: 0 }} />;
 }

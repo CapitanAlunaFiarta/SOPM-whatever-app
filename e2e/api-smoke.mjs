@@ -55,7 +55,7 @@ const userB = { fullName: 'Bob Test', username: `bob_${run}`, email: `bob_${run}
 const userC = { fullName: 'Cip Test', username: `cip_${run}`, email: `cip_${run}@example.com`, password };
 
 const baseTask = (overrides = {}) => ({
-  title: 'Task de test', category: 'Personal', priority: 'Medium', dueDate: today, isRecurring: false,
+  title: 'Task de test', category: 'CHORES', priority: 'Medium', dueDate: today, isRecurring: false,
   requiresLocation: false, latitude: 45.6525, longitude: 25.5888, radius: 150, requiresBiometrics: false,
   friend: '', ...overrides,
 });
@@ -99,7 +99,7 @@ async function main() {
 
   // --- finalizare unică + streak
   const simple = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Simplu', category: 'General', priority: 'Normal' }) });
-  check('creare task (valori vechi normalizate)', simple.status === 200 && simple.json?.category === 'Personal' && simple.json?.priority === 'Medium', simple);
+  check('creare task (valori vechi normalizate)', simple.status === 200 && simple.json?.category === 'CHORES' && simple.json?.priority === 'Medium', simple);
   const first = await call('POST', `${TASK}/tasks/${simple.json?.id}/verify-complete`, { token: tokenA, body: {} });
   check('finalizare task', first.status === 200 && first.json?.task?.status === 'Completed' && first.json?.streak === 1 && first.json?.points === 1, first);
   const second = await call('POST', `${TASK}/tasks/${simple.json?.id}/verify-complete`, { token: tokenA, body: {} });
@@ -109,6 +109,30 @@ async function main() {
 
   const invalidCategory = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ category: 'Altceva' }) });
   check('categorie necunoscută → 400', invalidCategory.status === 400, invalidCategory);
+  const invalidEnglish = await call('POST', `${TASK}/tasks`, { token: tokenA, headers: { 'Accept-Language': 'en' }, body: baseTask({ category: 'Altceva' }) });
+  check('erorile vin în limba cerută (en)', invalidEnglish.json?.error === 'Invalid category.', invalidEnglish.json);
+  const invalidSpanish = await call('POST', `${TASK}/tasks`, { token: tokenA, headers: { 'Accept-Language': 'es-ES,es;q=0.9' }, body: baseTask({ category: 'Altceva' }) });
+  check('erorile vin în limba cerută (es)', invalidSpanish.json?.error === 'Categoría no válida.', invalidSpanish.json);
+  const unauthorizedEnglish = await call('GET', `${TASK}/tasks`, { headers: { 'Accept-Language': 'en' } });
+  check('401 tradus (en)', unauthorizedEnglish.status === 401 && unauthorizedEnglish.json?.error === 'Authentication required.', unauthorizedEnglish.json);
+  const legacySport = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Sală', category: 'Sănătate' }) });
+  check('categorie veche Sănătate → SPORT', legacySport.json?.category === 'SPORT', legacySport.json);
+  const entertainment = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Film', category: 'ENTERTAINMENT' }) });
+  check('categorie nouă ENTERTAINMENT', entertainment.json?.category === 'ENTERTAINMENT', entertainment.json);
+
+  // --- recap lunar (rămâne corect și după ștergerea activității)
+  await call('POST', `${TASK}/tasks/${legacySport.json?.id}/verify-complete`, { token: tokenA, body: {} });
+  const recapBefore = await call('GET', `${TASK}/tasks/recap`, { token: tokenA });
+  const sportCount = (recap) => recap.json?.categories?.find((item) => item.category === 'SPORT')?.count;
+  check('recap: 4 categorii, finalizările numărate', recapBefore.status === 200 && recapBefore.json?.categories?.length === 4
+    && sportCount(recapBefore) === 1 && recapBefore.json?.total >= 2 && recapBefore.json?.month === today.slice(0, 7), recapBefore.json);
+  await call('DELETE', `${TASK}/tasks/${legacySport.json?.id}`, { token: tokenA });
+  const recapAfter = await call('GET', `${TASK}/tasks/recap`, { token: tokenA });
+  check('recap: activitatea ștearsă rămâne numărată', sportCount(recapAfter) === 1, recapAfter.json);
+  const recapBadMonth = await call('GET', `${TASK}/tasks/recap?month=2026-13`, { token: tokenA });
+  check('recap: lună invalidă → 400', recapBadMonth.status === 400, recapBadMonth);
+  const recapPast = await call('GET', `${TASK}/tasks/recap?month=2000-01`, { token: tokenA });
+  check('recap: lună fără activități', recapPast.status === 200 && recapPast.json?.total === 0, recapPast.json);
 
   // --- task recurent
   const recurring = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Zilnic', isRecurring: true }) });

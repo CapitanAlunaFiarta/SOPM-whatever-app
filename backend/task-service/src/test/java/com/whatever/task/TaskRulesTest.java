@@ -45,8 +45,12 @@ class TaskRulesTest {
 
     @Test
     void legacyValuesAreNormalized() {
-        assertEquals("Personal", TaskRules.category("General"));
-        assertEquals("Sănătate", TaskRules.category("sănătate"));
+        assertEquals("CHORES", TaskRules.category("General"));
+        assertEquals("CHORES", TaskRules.category(""));
+        assertEquals("SPORT", TaskRules.category("sănătate"));
+        assertEquals("STUDY", TaskRules.category("Proiect Echipă"));
+        assertEquals("ENTERTAINMENT", TaskRules.category("entertainment"));
+        assertEquals("CHORES", TaskRules.storedCategory("ceva vechi"));
         assertEquals("Medium", TaskRules.priority("Normal"));
         assertThrows(ApiException.class, () -> TaskRules.category("Altceva"));
         assertThrows(ApiException.class, () -> TaskRules.priority("Urgent"));

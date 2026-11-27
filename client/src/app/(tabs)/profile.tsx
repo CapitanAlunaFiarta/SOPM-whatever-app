@@ -1,48 +1,61 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Platform, View } from 'react-native';
 
+import { LanguagePicker } from '@/components/LanguagePicker';
 import { AppText, Badge, Banner, Button, Card, Row, Screen, StatTile, TextField } from '@/components/ui';
+import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { disableBiometrics, enableBiometrics, getBiometricStatus } from '@/lib/biometrics';
-import { friendlyDate, pluralDays } from '@/lib/dates';
 import { confirmAction } from '@/lib/dialogs';
 import { useChangePassword, useMe } from '@/lib/queries';
 
 export default function ProfileScreen() {
+  const { t, tp, formatDate } = useI18n();
   const { user, signOut } = useAuth();
   const me = useMe();
   const current = me.data ?? user;
   if (!current) return null;
 
   return (
-    <Screen title="Profil" subtitle={`@${current.username}`} refreshing={me.isRefetching} onRefresh={() => me.refetch()}>
+    <Screen title={t('tabs.profile')} subtitle={`@${current.username}`} refreshing={me.isRefetching} onRefresh={() => me.refetch()}>
       <Card>
         <AppText variant="heading">{current.fullName}</AppText>
         <AppText variant="muted">{current.email}</AppText>
         <Row style={{ flexWrap: 'wrap' }}>
-          <Badge text={current.role === 'ADMIN' ? 'Administrator' : 'Utilizator'} tone={current.role === 'ADMIN' ? 'accent' : 'neutral'} />
-          {current.lastActiveOn ? <Badge text={`Activ ultima dată: ${friendlyDate(current.lastActiveOn).toLowerCase()}`} /> : null}
+          <Badge text={current.role === 'ADMIN' ? t('role.admin') : t('role.user')} tone={current.role === 'ADMIN' ? 'accent' : 'neutral'} />
+          {current.lastActiveOn ? (
+            <Badge text={t('profile.lastActive', { date: formatDate(current.lastActiveOn, { inline: true }) })} />
+          ) : null}
         </Row>
       </Card>
-      <Row style={{ flexWrap: 'wrap' }}>
-        <StatTile label="Streak" value={`🔥 ${current.streak}`} hint={pluralDays(current.streak)} tone="warning" />
-        <StatTile label="Puncte" value={current.points} hint="activități finalizate" tone="success" />
-        <StatTile label="Freeze" value={`${current.freezesLeft}/3`} hint="se reîncarcă lunar" tone="info" />
+      <Row style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
+        <StatTile label={t('stats.streak')} value={`🔥 ${current.streak}`} hint={tp('plural.days', current.streak)} tone="warning" />
+        <StatTile label={t('stats.points')} value={current.points} hint={t('stats.pointsHint')} tone="success" />
+        <StatTile label={t('stats.freeze')} value={`${current.freezesLeft}/3`} hint={t('stats.freezeHintRefill')} tone="info" />
       </Row>
+      <Button variant="secondary" title={t('recap.title')} icon="stats-chart-outline" onPress={() => router.push('/recap')} />
+      <Card>
+        <AppText variant="heading">{t('language.title')}</AppText>
+        <AppText variant="muted">{t('language.hint')}</AppText>
+        <LanguagePicker />
+      </Card>
       <BiometricsCard userId={current.id} />
       <PasswordCard />
-      <Button variant="secondary" title="Deconectează-te" icon="log-out-outline" onPress={async () => {
-        if (await confirmAction('Te deconectezi?', 'Va trebui să te autentifici din nou.', 'Deconectează')) await signOut();
+      <Button variant="secondary" title={t('common.signOut')} icon="log-out-outline" onPress={async () => {
+        if (await confirmAction(t('profile.signOutTitle'), t('profile.signOutText'), t('profile.signOutConfirm'))) await signOut();
       }} />
     </Screen>
   );
 }
 
 function BiometricsCard({ userId }: { userId: number }) {
+  const { t, language } = useI18n();
   const client = useQueryClient();
-  const status = useQuery({ queryKey: ['biometrics', userId], queryFn: () => getBiometricStatus(userId) });
+  // Limba face parte din cheie: eticheta și indiciul vin traduse din biometrics.ts.
+  const status = useQuery({ queryKey: ['biometrics', userId, language], queryFn: () => getBiometricStatus(userId) });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -55,10 +68,10 @@ function BiometricsCard({ userId }: { userId: number }) {
     try {
       if (status.data?.enabled) {
         await disableBiometrics(userId);
-        setNotice(web ? 'Passkey-ul nu va mai fi folosit în acest browser.' : 'Biometria a fost dezactivată pe acest telefon.');
+        setNotice(web ? t('bio.webDisabled') : t('bio.nativeDisabled'));
       } else {
         await enableBiometrics(userId);
-        setNotice(web ? 'Passkey activat. Îl vei folosi la activitățile care cer biometrie.' : 'Biometria e activă pe acest telefon.');
+        setNotice(web ? t('bio.webEnabled') : t('bio.nativeEnabled'));
       }
       await client.invalidateQueries({ queryKey: ['biometrics', userId] });
       await client.invalidateQueries({ queryKey: ['me'] });
@@ -71,23 +84,19 @@ function BiometricsCard({ userId }: { userId: number }) {
 
   return (
     <Card>
-      <AppText variant="heading">{web ? 'Passkey' : 'Biometrie'}</AppText>
-      <AppText variant="muted">
-        {web
-          ? 'Activitățile cu „biometrie” se confirmă pe web cu un passkey (amprentă, Face ID sau Windows Hello).'
-          : 'Telefonul păstrează o cheie securizată, deblocată doar cu amprenta sau Face ID. Serverul verifică semnătura la fiecare confirmare.'}
-      </AppText>
+      <AppText variant="heading">{web ? t('passkey.label') : t('bio.generic')}</AppText>
+      <AppText variant="muted">{web ? t('bio.webDescription') : t('bio.nativeDescription')}</AppText>
       {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
       {notice ? <Banner tone="success" text={notice} onClose={() => setNotice(null)} /> : null}
       {status.data && !status.data.available ? (
-        <Banner tone="info" text={status.data.hint ?? 'Indisponibil pe acest dispozitiv.'} />
+        <Banner tone="info" text={status.data.hint ?? t('bio.deviceUnavailable')} />
       ) : (
         <View style={{ gap: 8 }}>
           <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <Badge text={status.data?.enabled ? 'Activă pe acest dispozitiv' : 'Neactivată pe acest dispozitiv'}
+            <Badge text={status.data?.enabled ? t('bio.activeHere') : t('bio.inactiveHere')}
               tone={status.data?.enabled ? 'success' : 'neutral'} icon="finger-print" />
             <Button compact variant={status.data?.enabled ? 'secondary' : 'primary'} loading={busy}
-              title={status.data?.enabled ? 'Dezactivează' : 'Activează'} icon="finger-print" onPress={toggle} />
+              title={status.data?.enabled ? t('bio.disable') : t('bio.enable')} icon="finger-print" onPress={toggle} />
           </Row>
           {status.data?.label ? <AppText variant="small">{status.data.label}</AppText> : null}
         </View>
@@ -97,6 +106,7 @@ function BiometricsCard({ userId }: { userId: number }) {
 }
 
 function PasswordCard() {
+  const { t } = useI18n();
   const change = useChangePassword();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -107,11 +117,12 @@ function PasswordCard() {
     setError(null);
     setNotice(null);
     if (next.length < 12) {
-      setError('Parola nouă trebuie să aibă cel puțin 12 caractere.');
+      setError(t('password.tooShortNew'));
       return;
     }
     try {
-      setNotice(await change.mutateAsync({ currentPassword: current, newPassword: next }));
+      await change.mutateAsync({ currentPassword: current, newPassword: next });
+      setNotice(t('password.changed'));
       setCurrent('');
       setNext('');
     } catch (e) {
@@ -121,12 +132,12 @@ function PasswordCard() {
 
   return (
     <Card>
-      <AppText variant="heading">Schimbă parola</AppText>
+      <AppText variant="heading">{t('password.title')}</AppText>
       {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
       {notice ? <Banner tone="success" text={notice} onClose={() => setNotice(null)} /> : null}
-      <TextField label="Parola actuală" value={current} onChangeText={setCurrent} secureTextEntry autoComplete="current-password" />
-      <TextField label="Parola nouă (minim 12 caractere)" value={next} onChangeText={setNext} secureTextEntry autoComplete="new-password" />
-      <Button variant="secondary" title="Salvează parola" icon="key-outline" loading={change.isPending} onPress={submit} />
+      <TextField label={t('password.current')} value={current} onChangeText={setCurrent} secureTextEntry autoComplete="current-password" />
+      <TextField label={t('password.newLabel')} value={next} onChangeText={setNext} secureTextEntry autoComplete="new-password" />
+      <Button variant="secondary" title={t('password.save')} icon="key-outline" loading={change.isPending} onPress={submit} />
     </Card>
   );
 }

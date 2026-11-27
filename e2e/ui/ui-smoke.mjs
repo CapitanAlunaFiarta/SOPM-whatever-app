@@ -1,6 +1,7 @@
 // Test end-to-end al aplicației web (client/) într-un Chrome real, pe backend-ul pornit local în CI.
-// Acoperă: cont nou, activități (simplă, cu passkey, cu locație), streak/puncte, chat, deconectare,
-// rute protejate, resetare parolă prin cod, panoul de admin.
+// Acoperă: cont nou, activități (simplă, cu passkey, cu locație), streak/puncte, cercul de progres,
+// recap-ul lunar pe categorii, chat, deconectare, rute protejate, schimbarea limbii (inclusiv mesajele
+// traduse de server), resetare parolă prin cod, panoul de admin.
 // Variabile: UI_URL (implicit http://localhost:5173), CHROME_PATH, USER_LOG (log-ul user-service,
 // pentru codul de resetare când MAIL_PROVIDER=log), ADMIN_EMAIL, ADMIN_PASSWORD.
 import { existsSync, readFileSync } from 'node:fs';
@@ -124,9 +125,10 @@ async function confirmTask(title) {
   await taskCard(title).getByRole('button', { name: 'Confirmă', exact: true }).click();
 }
 
-async function createTask(title, { biometrics = false, location = false } = {}) {
+async function createTask(title, { biometrics = false, location = false, category } = {}) {
   await page.goto(`${BASE}/task/new`);
   await field('Ce vrei să faci?').fill(title);
+  if (category) await button(category).click();
   if (biometrics) await visible(page.getByRole('switch', { name: 'Confirmare cu biometrie' })).click();
   if (location) {
     await visible(page.getByRole('switch', { name: 'Confirmare în locație' })).click();
@@ -207,7 +209,7 @@ if (ok) {
   }
 
   await step('activitate cu locație: confirmată la fața locului', async () => {
-    await createTask('Alerg în parc', { location: true });
+    await createTask('Alerg în parc', { location: true, category: 'Activitate fizică / sport' });
     const before = dialogs.length;
     await confirmTask('Alerg în parc');
     await expectDialog(before, /Streak: 1 zi · \d+ puncte/);
@@ -223,6 +225,27 @@ if (ok) {
     await context.setGeolocation(BRASOV);
   });
 
+  await step('acasă: cercul arată progresul de azi', async () => {
+    await page.goto(BASE);
+    await waitPath('/');
+    // Trei activități confirmate azi și una încă deschisă („Înot la bazin”), deci între 1 și 99%.
+    const ring = visible(page.getByRole('progressbar', { name: /^Progresul de azi: [1-9]\d?%$/ })).first();
+    await ring.waitFor();
+    const value = Number(await ring.getAttribute('aria-valuenow'));
+    if (!(value > 0 && value < 100)) throw new Error(`Progres afișat: ${value}%`);
+    await seen(/^\d din \d finalizate$/);
+  });
+
+  await step('recap lunar pe categorii', async () => {
+    await button('Vezi recapul').click();
+    await waitPath('/recap');
+    await visible(page.getByLabel(/^Activitate fizică \/ sport: 1 activitate, \d+%$/)).first().waitFor();
+    await visible(page.getByLabel(/^Treburi \/ comisioane: \d+ activități, \d+%$/)).first().waitFor();
+    await seen('Divertisment');
+    await button('Închide').click();
+    await waitPath('/');
+  });
+
   await step('chat: mesajul apare în listă', async () => {
     await openTab('Social', '/social');
     const text = `Salut din testul UI ${run}`;
@@ -235,6 +258,26 @@ if (ok) {
     await logout();
     await page.goto(`${BASE}/tasks`);
     await waitPath('/login');
+  });
+
+  await step('limba: engleză (inclusiv erorile serverului), apoi înapoi la română', async () => {
+    await page.goto(`${BASE}/login`);
+    try {
+      await visible(page.getByRole('radio', { name: 'English' })).click();
+      await button('Sign in').waitFor();
+      await field('Email').fill(me.email);
+      await field('Password').fill('parola-gresita-123456');
+      await button('Sign in').click();
+      await seen('Incorrect email or password.');
+      // Alegerea rămâne după reîncărcare.
+      await page.reload();
+      await button('Sign in').waitFor();
+      await visible(page.getByRole('radio', { name: 'Română' })).click();
+      await button('Intră în cont').waitFor();
+    } finally {
+      // Pașii următori caută textele în română, chiar dacă acest pas a eșuat.
+      await page.evaluate(() => window.localStorage.setItem('whatever.language', 'ro')).catch(() => undefined);
+    }
   });
 
   await step('resetare parolă cu codul din email', async () => {

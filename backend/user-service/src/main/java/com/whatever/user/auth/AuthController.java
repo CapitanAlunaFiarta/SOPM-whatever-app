@@ -4,6 +4,7 @@ import com.whatever.user.security.AuthUser;
 import com.whatever.user.security.JwtService;
 import com.whatever.user.users.UserRepository;
 import com.whatever.user.web.ApiException;
+import com.whatever.user.web.I18n;
 import com.whatever.user.web.RateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -65,7 +66,7 @@ public class AuthController {
         rateLimiter.check("login-email:" + email, 8, Duration.ofMinutes(10));
         Map<String, Object> user = users.findByEmail(email)
                 .filter(row -> encoder.matches(request.password(), String.valueOf(row.get("password_hash"))))
-                .orElseThrow(() -> new ApiException(401, "Email sau parola incorecta."));
+                .orElseThrow(() -> new ApiException(401, "Email sau parolă incorectă."));
         return session(user);
     }
 
@@ -85,8 +86,8 @@ public class AuthController {
     @PostMapping("/users/refresh")
     public Map<String, Object> refresh(@Valid @RequestBody RefreshRequest request) {
         String email = refreshTokens.consume(request.refreshToken())
-                .orElseThrow(() -> new ApiException(401, "Autentificare necesara."));
-        return session(users.findByEmail(email).orElseThrow(() -> new ApiException(401, "Autentificare necesara.")));
+                .orElseThrow(() -> new ApiException(401, "Autentificare necesară."));
+        return session(users.findByEmail(email).orElseThrow(() -> new ApiException(401, "Autentificare necesară.")));
     }
 
     @PostMapping("/users/logout")
@@ -116,7 +117,8 @@ public class AuthController {
 
     @PostMapping("/users/password-reset/request")
     public Map<String, String> requestReset(@Valid @RequestBody PasswordResetRequest request, HttpServletRequest http) {
-        passwordReset.request(request.email(), request.username(), RateLimiter.clientIp(http));
+        passwordReset.request(request.email(), request.username(), RateLimiter.clientIp(http),
+                I18n.language(http.getHeader("Accept-Language")));
         return Map.of("message", "Dacă datele sunt corecte, ți-am trimis un cod pe email.");
     }
 

@@ -4,6 +4,8 @@ import * as Device from 'expo-device';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 
+import { translate } from '../i18n/core';
+
 import { ApiError, request } from './api';
 import { base64UrlToBytes, bytesToBase64Url, completionMessage, utf8 } from './encoding';
 
@@ -28,12 +30,12 @@ const deviceIdName = (userId: number) => `whatever.deviceId.${userId}`;
 async function hardwareLabel(): Promise<string> {
   try {
     const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-    if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) return 'Face ID / recunoaștere facială';
-    if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) return 'Amprentă';
+    if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) return translate('bio.faceId');
+    if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) return translate('bio.fingerprint');
   } catch {
     // ignorăm
   }
-  return 'Biometrie';
+  return translate('bio.generic');
 }
 
 export async function getBiometricStatus(userId: number): Promise<BiometricStatus> {
@@ -43,16 +45,16 @@ export async function getBiometricStatus(userId: number): Promise<BiometricStatu
     hardwareLabel(),
     SecureStore.getItemAsync(deviceIdName(userId)),
   ]);
-  if (!hasHardware) return { available: false, enabled: false, label, hint: 'Telefonul nu are senzor biometric.' };
+  if (!hasHardware) return { available: false, enabled: false, label, hint: translate('bio.noHardware') };
   if (!isEnrolled) {
-    return { available: false, enabled: false, label, hint: 'Configurează amprenta sau Face ID din setările telefonului.' };
+    return { available: false, enabled: false, label, hint: translate('bio.notEnrolled') };
   }
   return { available: true, enabled: Boolean(deviceId), label };
 }
 
 export async function enableBiometrics(userId: number): Promise<void> {
   const status = await getBiometricStatus(userId);
-  if (!status.available) throw new Error(status.hint ?? 'Biometria nu este disponibilă.');
+  if (!status.available) throw new Error(status.hint ?? translate('bio.unavailable'));
 
   const secretKey = Crypto.getRandomBytes(32);
   const publicKey = ed25519.getPublicKey(secretKey);
@@ -60,14 +62,13 @@ export async function enableBiometrics(userId: number): Promise<void> {
     await SecureStore.setItemAsync(secretKeyName(userId), bytesToBase64Url(secretKey), {
       keychainService: SECURE_SERVICE,
       requireAuthentication: true,
-      authenticationPrompt: 'Activează biometria pentru Whatever',
+      authenticationPrompt: translate('bio.enablePrompt'),
     });
   } catch {
-    throw new Error('Cheia nu a putut fi salvată în zona securizată a telefonului. În Expo Go pe iPhone, Face ID '
-      + 'nu este disponibil — folosește build-ul aplicației.');
+    throw new Error(translate('bio.keyStoreFailed'));
   }
 
-  const name = [Device.manufacturer, Device.modelName].filter(Boolean).join(' ') || 'Telefon';
+  const name = [Device.manufacturer, Device.modelName].filter(Boolean).join(' ') || translate('bio.phone');
   try {
     const { deviceId } = await request<{ deviceId: string }>('user', '/users/devices', {
       method: 'POST',
@@ -93,7 +94,7 @@ export async function disableBiometrics(userId: number): Promise<void> {
 export async function biometricTokenForTask(userId: number, taskId: number): Promise<string> {
   const deviceId = await SecureStore.getItemAsync(deviceIdName(userId));
   if (!deviceId) {
-    throw new Error('Activează biometria din Profil (o singură dată pe acest telefon), apoi confirmă din nou.');
+    throw new Error(translate('bio.enableFirst'));
   }
   let challenge: { challengeId: number; challenge: string };
   try {
@@ -101,7 +102,7 @@ export async function biometricTokenForTask(userId: number, taskId: number): Pro
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       await disableBiometrics(userId);
-      throw new Error('Telefonul nu mai era înregistrat. Activează din nou biometria din Profil.');
+      throw new Error(translate('bio.deviceUnregistered'));
     }
     throw error;
   }
@@ -111,15 +112,14 @@ export async function biometricTokenForTask(userId: number, taskId: number): Pro
     stored = await SecureStore.getItemAsync(secretKeyName(userId), {
       keychainService: SECURE_SERVICE,
       requireAuthentication: true,
-      authenticationPrompt: 'Confirmă finalizarea activității',
+      authenticationPrompt: translate('bio.confirmPrompt'),
     });
   } catch {
-    throw new Error('Confirmarea biometrică a fost anulată sau nu a reușit. Dacă ai schimbat amprentele sau Face ID, '
-      + 'dezactivează și activează din nou biometria din Profil.');
+    throw new Error(translate('bio.cancelled'));
   }
   if (!stored) {
     await disableBiometrics(userId);
-    throw new Error('Cheia biometrică nu mai există pe telefon (poate s-au schimbat amprentele). Activează din nou din Profil.');
+    throw new Error(translate('bio.keyMissing'));
   }
 
   const signature = ed25519.sign(utf8(completionMessage(taskId, challenge.challenge)), base64UrlToBytes(stored));
