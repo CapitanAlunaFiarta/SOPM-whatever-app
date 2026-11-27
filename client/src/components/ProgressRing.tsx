@@ -7,10 +7,12 @@ import { colors } from './theme';
  * Cerc de progres (procent completat). `percent = null` înseamnă „nimic de măsurat”: cercul rămâne gol
  * și în mijloc apare o liniuță. Același desen SVG pe Android, iOS și web.
  */
-export function ProgressRing({ percent, label, size = 116, stroke = 11 }: {
+export function ProgressRing({ percent, label, center, size = 116, stroke = 11 }: {
   percent: number | null;
   /** Textul citit de cititorul de ecran. */
   label: string;
+  /** Textul din mijloc (implicit procentul), ex. timpul rămas al unei sesiuni de focus. */
+  center?: string;
   size?: number;
   stroke?: number;
 }) {
@@ -37,7 +39,7 @@ export function ProgressRing({ percent, label, size = 116, stroke = 11 }: {
       </View>
       <View style={[StyleSheet.absoluteFill, styles.center]}>
         <Text style={[styles.value, { color: percent === null ? colors.faint : colors.text }]}>
-          {percent === null ? '–' : `${value}%`}
+          {center ?? (percent === null ? '–' : `${value}%`)}
         </Text>
       </View>
     </View>
