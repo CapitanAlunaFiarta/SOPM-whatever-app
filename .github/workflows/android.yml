@@ -30,8 +30,6 @@ jobs:
     timeout-minutes: 60
     env:
       ANDROID_VERSION_CODE: ${{ github.run_number }}
-      # Opțional: secret de repository; fără el aplicația merge, dar fără hartă pe Android.
-      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -58,8 +56,9 @@ jobs:
           mkdir -p /tmp/apk
           cp android/app/build/outputs/apk/release/app-release.apk /tmp/apk/whatever.apk
           size=$(du -h /tmp/apk/whatever.apk | cut -f1)
-          maps=$([ -n "$GOOGLE_MAPS_API_KEY" ] && echo "cu hartă" || echo "fără cheie Google Maps")
-          echo "::notice title=APK::whatever.apk ${size}, versionCode ${ANDROID_VERSION_CODE}, ${maps}"
+          # Harta pe Android e Leaflet într-un WebView; react-native-maps nu trebuie să ajungă în APK.
+          linked=$(node -e "try { const j = require('./android/build/generated/autolinking/autolinking.json'); console.log(Object.keys(j.dependencies || {}).filter((d) => /maps|webview/.test(d)).join(' ') || '-') } catch (e) { console.log('n/a') }")
+          echo "::notice title=APK::whatever.apk ${size}, versionCode ${ANDROID_VERSION_CODE}, module hartă: ${linked}"
       - uses: actions/upload-artifact@v4
         with:
           name: whatever-android-apk
