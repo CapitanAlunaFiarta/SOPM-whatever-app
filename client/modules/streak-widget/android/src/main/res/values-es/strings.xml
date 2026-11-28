@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="streak_widget_label">Racha de Whatever</string>
+  <string name="streak_widget_description">Tu racha y si has confirmado algo hoy.</string>
+  <string name="streak_widget_placeholder_label">Racha</string>
+  <string name="streak_widget_open">Abre Whatever</string>
+</resources>

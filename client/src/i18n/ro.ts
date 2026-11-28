@@ -689,6 +689,11 @@ export const ro = {
   'reminder.startBody': 'Confirmă o activitate azi și streak-ul pornește de la 1.',
   // Comun
   'common.openSettings': 'Deschide setările',
+  // Widgetul Android cu streak-ul
+  'widget.zero': 'zile la rând',
+  'widget.done': 'Azi: gata ✓',
+  'widget.pending': 'Azi: încă nimic',
+  'widget.start': 'Începe azi unul nou',
   'plural.days': { one: '{count} zi', few: '{count} zile', other: '{count} de zile' },
   'plural.points': { one: '{count} punct', few: '{count} puncte', other: '{count} de puncte' },
   'plural.accounts': { one: '{count} cont', few: '{count} conturi', other: '{count} de conturi' },
@@ -715,4 +720,5 @@ export const ro = {
   'plural.lastWeeks': { one: 'ultima săptămână', few: 'ultimele {count} săptămâni', other: 'ultimele {count} de săptămâni' },
   'plural.unreadMessages': { one: '{count} mesaj nou', few: '{count} mesaje noi', other: '{count} de mesaje noi' },
   'plural.pushDevices': { one: '{count} browser abonat', few: '{count} browsere abonate', other: '{count} de browsere abonate' },
+  'plural.widgetDays': { one: 'zi la rând', few: 'zile la rând', other: 'de zile la rând' },
 } as const;
