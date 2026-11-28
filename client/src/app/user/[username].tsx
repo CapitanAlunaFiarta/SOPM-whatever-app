@@ -84,7 +84,9 @@ export default function UserProfileScreen() {
           <>
             <Badge text={t('user.friends')} tone="success" icon="checkmark-circle" />
             <Row style={{ flexWrap: 'wrap' }}>
-              <Button compact icon="hand-left-outline" title={t('favor.ask')}
+              <Button compact icon="chatbubble-outline" title={t('dm.send')}
+                onPress={() => router.push(`/chat/dm/${encodeURIComponent(person.username)}`)} />
+              <Button compact variant="secondary" icon="hand-left-outline" title={t('favor.ask')}
                 onPress={() => router.push({ pathname: '/favor/new', params: { friend: person.username } })} />
               <Button compact variant="ghost" title={t('user.removeFriend')} onPress={async () => {
                 if (await confirmAction(t('friends.removeConfirm'), `@${person.username}`, t('common.delete'))) await run('remove');

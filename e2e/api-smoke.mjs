@@ -360,6 +360,42 @@ async function main() {
   check('grup: mesaj gol → 400', emptyMessage.status === 400, emptyMessage);
   const globalChat = await call('GET', `${USER}/chat`, { token: tokenB });
   check('grup: mesajul nu apare în chatul general', !(globalChat.json || []).some((m) => m.text === 'Ne vedem la 7'), globalChat.json);
+  // reacții și răspunsuri în chatul activității
+  const groupReply = await call('POST', `${TASK}/tasks/${gid}/messages`, { token: tokenB, body: { text: 'Vin și eu', replyTo: sent.json?.id } });
+  check('grup: răspuns la un mesaj, cu citatul lui (fără email)', groupReply.status === 200
+    && groupReply.json?.replyTo?.id === sent.json?.id && groupReply.json.replyTo.text === 'Ne vedem la 7'
+    && groupReply.json.replyTo.username === userA.username && !('email' in groupReply.json.replyTo), groupReply.json);
+  const groupReplyMissing = await call('POST', `${TASK}/tasks/${gid}/messages`, { token: tokenB, body: { text: 'Hm', replyTo: 999999999 } });
+  check('grup: răspuns la un mesaj care nu există → 404', groupReplyMissing.status === 404, groupReplyMissing);
+  const replyId = groupReply.json?.id;
+  const reactUrl = `${TASK}/tasks/${gid}/messages/${replyId}/reactions`;
+  const thumbs = await call('POST', reactUrl, { token: tokenA, body: { emoji: '👍' } });
+  check('grup: A reacționează cu 👍', thumbs.status === 200 && thumbs.json?.id === replyId
+    && JSON.stringify(thumbs.json?.reactions) === JSON.stringify([{ emoji: '👍', count: 1, mine: true }]), thumbs.json);
+  const heart = await call('POST', reactUrl, { token: tokenB, body: { emoji: '❤' } });
+  const reactedByA = (await call('GET', `${TASK}/tasks/${gid}/messages`, { token: tokenA })).json?.find((m) => m.id === replyId);
+  check('grup: ❤ fără selector e același ❤️; fiecare își vede reacția', heart.status === 200
+    && JSON.stringify(reactedByA?.reactions) === JSON.stringify([{ emoji: '👍', count: 1, mine: true }, { emoji: '❤️', count: 1, mine: false }]),
+  reactedByA);
+  const swapReaction = await call('POST', reactUrl, { token: tokenA, body: { emoji: '🔥' } });
+  check('grup: altă reacție o înlocuiește pe prima (una de persoană)', swapReaction.status === 200
+    && swapReaction.json?.reactions?.length === 2 && !swapReaction.json.reactions.some((r) => r.emoji === '👍')
+    && swapReaction.json.reactions.find((r) => r.emoji === '🔥')?.mine === true, swapReaction.json);
+  const undoReaction = await call('POST', reactUrl, { token: tokenA, body: { emoji: '🔥' } });
+  check('grup: aceeași reacție a doua oară o scoate', undoReaction.status === 200
+    && JSON.stringify(undoReaction.json?.reactions) === JSON.stringify([{ emoji: '❤️', count: 1, mine: false }]), undoReaction.json);
+  const pizza = await call('POST', reactUrl, { token: tokenA, body: { emoji: '🍕' } });
+  check('grup: reacție necunoscută → 400', pizza.status === 400, pizza);
+  const invitedReacts = await call('POST', reactUrl, { token: tokenC, body: { emoji: '👍' } });
+  check('grup: invitatul care n-a acceptat nu reacționează (409)', invitedReacts.status === 409, invitedReacts);
+  const replyToReply = await call('POST', `${TASK}/tasks/${gid}/messages`, { token: tokenA, body: { text: 'Super', replyTo: replyId } });
+  const deleteOthersGroup = await call('DELETE', `${TASK}/tasks/${gid}/messages/${sent.json?.id}`, { token: tokenB });
+  check('grup: nu poți șterge mesajul altcuiva → 403', deleteOthersGroup.status === 403, deleteOthersGroup);
+  const deleteOwnGroup = await call('DELETE', `${TASK}/tasks/${gid}/messages/${replyId}`, { token: tokenB });
+  const groupAfterDelete = (await call('GET', `${TASK}/tasks/${gid}/messages`, { token: tokenA })).json ?? [];
+  check('grup: îți ștergi mesajul; răspunsul la el rămâne, fără citat', replyToReply.status === 200 && deleteOwnGroup.status === 200
+    && !groupAfterDelete.some((m) => m.id === replyId) && groupAfterDelete.find((m) => m.id === replyToReply.json?.id)?.replyTo === null,
+  groupAfterDelete);
   const aConfirms = await call('POST', `${TASK}/tasks/${gid}/verify-complete`, { token: tokenA, body: {} });
   check('grup: A confirmă, activitatea îi așteaptă pe ceilalți', aConfirms.status === 200
     && aConfirms.json?.task?.status === 'Upcoming' && aConfirms.json.task.confirmedByMe === true
@@ -620,6 +656,84 @@ async function main() {
   const afterDelete = await call('GET', `${USER}/chat`, { token: tokenA });
   check('îți poți șterge mesajele tale, nu și pe ale altora', typo.status === 200 && deleteOthers.status === 403
     && deleteOwn.status === 200 && !afterDelete.json?.some((m) => m.id === typoId), [deleteOthers.status, deleteOwn.status]);
+  const helloId = (await call('GET', `${USER}/chat`, { token: tokenA })).json?.find((m) => m.text === 'Salut din CI')?.id;
+  const chatReply = await call('POST', `${USER}/chat`, { token: tokenB, body: { text: 'Salut, Ana!', replyTo: helloId } });
+  const chatWithReply = (await call('GET', `${USER}/chat`, { token: tokenC })).json ?? [];
+  const replyMessage = chatWithReply.find((m) => m.text === 'Salut, Ana!');
+  check('comunitate: răspuns cu citatul mesajului (fără email)', chatReply.status === 200 && replyMessage?.replyTo?.id === helloId
+    && replyMessage.replyTo.text === 'Salut din CI' && replyMessage.replyTo.username === userA.username
+    && !('email' in replyMessage.replyTo) && Array.isArray(replyMessage.reactions), replyMessage);
+  const chatReplyMissing = await call('POST', `${USER}/chat`, { token: tokenB, body: { text: 'Hm', replyTo: 999999999 } });
+  check('comunitate: răspuns la un mesaj care nu există → 404', chatReplyMissing.status === 404, chatReplyMissing);
+  const laugh = await call('POST', `${USER}/chat/${helloId}/reactions`, { token: tokenC, body: { emoji: '😂' } });
+  const laughSeenByA = (await call('GET', `${USER}/chat`, { token: tokenA })).json?.find((m) => m.id === helloId);
+  check('comunitate: reacția lui C, văzută de A (fără să fie a lui)', laugh.status === 200
+    && JSON.stringify(laugh.json?.reactions) === JSON.stringify([{ emoji: '😂', count: 1, mine: true }])
+    && JSON.stringify(laughSeenByA?.reactions) === JSON.stringify([{ emoji: '😂', count: 1, mine: false }]), laughSeenByA);
+  const laughAgain = await call('POST', `${USER}/chat/${helloId}/reactions`, { token: tokenC, body: { emoji: '😂' } });
+  check('comunitate: a doua apăsare scoate reacția', laughAgain.status === 200 && laughAgain.json?.reactions?.length === 0, laughAgain.json);
+  const reactMissing = await call('POST', `${USER}/chat/999999999/reactions`, { token: tokenC, body: { emoji: '👍' } });
+  const reactBad = await call('POST', `${USER}/chat/${helloId}/reactions`, { token: tokenC, body: { emoji: 'x' } });
+  check('comunitate: reacție la un mesaj inexistent → 404, emoji necunoscut → 400', reactMissing.status === 404 && reactBad.status === 400,
+    [reactMissing.status, reactBad.status]);
+
+  // --- mesaje private: doar între prieteni; deschiderea conversației marchează mesajele ca citite
+  const dmToB = await call('POST', `${USER}/dm/${userB.username}`, { token: tokenA, body: { text: 'Salut, Bob! Mergem mâine?' } });
+  check('DM: A îi scrie prietenului B', dmToB.status === 200 && dmToB.json?.mine === true && dmToB.json.read === false
+    && dmToB.json.username === userA.username && !('email' in dmToB.json), dmToB.json);
+  const bInbox = await call('GET', `${USER}/dm`, { token: tokenB });
+  const fromA = (bInbox.json ?? []).find((c) => c.username === userA.username);
+  check('DM: B vede conversația cu un mesaj necitit (fără emailuri)', bInbox.status === 200 && fromA?.unread === 1
+    && fromA.canWrite === true && fromA.lastMessage?.text === 'Salut, Bob! Mergem mâine?' && fromA.lastMessage.mine === false
+    && !JSON.stringify(bInbox.json).includes('@example.com'), bInbox.json);
+  const bOpens = await call('GET', `${USER}/dm/${userA.username}`, { token: tokenB });
+  check('DM: B deschide conversația (mesajul încă apare ca necitit în răspunsul ăsta)', bOpens.status === 200
+    && bOpens.json?.with?.username === userA.username && bOpens.json.canWrite === true && bOpens.json.messages?.length === 1
+    && bOpens.json.messages[0].mine === false && bOpens.json.messages[0].read === false
+    && !JSON.stringify(bOpens.json).includes('@example.com'), bOpens.json);
+  const bInboxAfter = (await call('GET', `${USER}/dm`, { token: tokenB })).json?.find((c) => c.username === userA.username);
+  const aSeesRead = (await call('GET', `${USER}/dm/${userB.username}`, { token: tokenA })).json?.messages?.[0];
+  check('DM: după deschidere e citit (B: 0 necitite; A vede „văzut”)', bInboxAfter?.unread === 0 && aSeesRead?.read === true,
+    { bInboxAfter, aSeesRead });
+  const dmReply = await call('POST', `${USER}/dm/@${userA.username}`, { token: tokenB, body: { text: 'Da, la 7!', replyTo: dmToB.json?.id } });
+  check('DM: B răspunde cu citat', dmReply.status === 200 && dmReply.json?.replyTo?.id === dmToB.json?.id
+    && dmReply.json.replyTo.text === 'Salut, Bob! Mergem mâine?', dmReply.json);
+  const dmReact = await call('POST', `${USER}/dm/messages/${dmToB.json?.id}/reactions`, { token: tokenB, body: { emoji: '👍' } });
+  const aThread = (await call('GET', `${USER}/dm/${userB.username}`, { token: tokenA })).json;
+  check('DM: reacția lui B apare la A', dmReact.status === 200
+    && JSON.stringify(aThread?.messages?.find((m) => m.id === dmToB.json?.id)?.reactions) === JSON.stringify([{ emoji: '👍', count: 1, mine: false }]),
+  aThread?.messages);
+  const strangerWrites = await call('POST', `${USER}/dm/${userB.username}`, { token: tokenC, body: { text: 'Salut' } });
+  check('DM: unui străin nu-i poți scrie (403)', strangerWrites.status === 403, strangerWrites);
+  const strangerReacts = await call('POST', `${USER}/dm/messages/${dmToB.json?.id}/reactions`, { token: tokenC, body: { emoji: '👍' } });
+  const strangerDeletes = await call('DELETE', `${USER}/dm/messages/${dmToB.json?.id}`, { token: tokenC });
+  check('DM: un străin nu atinge mesajele altora (404, nimic nu se scurge)', strangerReacts.status === 404 && strangerDeletes.status === 404,
+    [strangerReacts.status, strangerDeletes.status]);
+  const strangerReads = await call('GET', `${USER}/dm/${userB.username}`, { token: tokenC });
+  check('DM: un străin vede doar conversația lui (goală, fără drept de scris)', strangerReads.status === 200
+    && strangerReads.json?.messages?.length === 0 && strangerReads.json.canWrite === false, strangerReads.json);
+  const dmSelf = await call('POST', `${USER}/dm/${userA.username}`, { token: tokenA, body: { text: 'eu' } });
+  const dmNobody = await call('POST', `${USER}/dm/nimeni_${run}`, { token: tokenA, body: { text: 'alo' } });
+  const dmEmpty = await call('POST', `${USER}/dm/${userB.username}`, { token: tokenA, body: { text: '  ' } });
+  check('DM: sie însuși → 400, cuiva inexistent → 404, gol → 400', dmSelf.status === 400 && dmNobody.status === 404 && dmEmpty.status === 400,
+    [dmSelf.status, dmNobody.status, dmEmpty.status]);
+  const bDeletesA = await call('DELETE', `${USER}/dm/messages/${dmToB.json?.id}`, { token: tokenB });
+  const aDeletesOwn = await call('DELETE', `${USER}/dm/messages/${dmToB.json?.id}`, { token: tokenA });
+  const bThreadAfter = (await call('GET', `${USER}/dm/${userA.username}`, { token: tokenB })).json;
+  check('DM: doar cine a scris șterge mesajul; răspunsul rămâne fără citat', bDeletesA.status === 403 && aDeletesOwn.status === 200
+    && bThreadAfter?.messages?.length === 1 && bThreadAfter.messages[0].text === 'Da, la 7!' && bThreadAfter.messages[0].replyTo === null,
+  bThreadAfter);
+  // C și B devin prieteni, își scriu, apoi B îl șterge pe C: conversația rămâne, dar doar de citit.
+  await call('POST', `${USER}/friends`, { token: tokenC, body: { username: userB.username } });
+  await call('POST', `${USER}/friends/${userC.username}/accept`, { token: tokenB });
+  const cWrites = await call('POST', `${USER}/dm/${userB.username}`, { token: tokenC, body: { text: 'Mersi de acceptare!' } });
+  const unfriend = await call('DELETE', `${USER}/friends/${userC.username}`, { token: tokenB });
+  const cAfterUnfriend = await call('POST', `${USER}/dm/${userB.username}`, { token: tokenC, body: { text: 'Mai ești?' } });
+  const cThread = (await call('GET', `${USER}/dm/${userB.username}`, { token: tokenC })).json;
+  const cInbox = (await call('GET', `${USER}/dm`, { token: tokenC })).json?.find((c) => c.username === userB.username);
+  check('DM: după ce prietenia se încheie conversația rămâne doar de citit', cWrites.status === 200 && unfriend.status === 200
+    && cAfterUnfriend.status === 403 && cThread?.canWrite === false && cThread.messages?.length === 1 && cInbox?.canWrite === false,
+  { cAfterUnfriend: cAfterUnfriend.status, cThread, cInbox });
 
   // --- admin
   let adminLogin = { status: 0 };

@@ -493,6 +493,7 @@ if (ok) {
     await seen(/^Ana are un streak de \d+ (zi|zile|de zile)!$/);
   });
 
+  let dana = null;
   await step('profil din chat: cererea de prietenie trimisă și acceptată', async () => {
     const stranger = {
       fullName: 'Dana Străină', username: `dana_${run}`, email: `dana_${run}@ci.local`, password: 'parola-dana-foarte-sigura-1',
@@ -509,6 +510,54 @@ if (ok) {
     await api('user', `/friends/${me.username}/accept`, { token, body: {} });
     await page.reload();
     await seen('Sunteți prieteni');
+    dana = { ...stranger, token };
+  });
+
+  await step('chat: reacție și răspuns în comunitate; mesaj privat cu un prieten', async () => {
+    if (!dana) throw new Error('Lipsește prietena din pasul anterior');
+    await page.goto(`${BASE}/chat/community`);
+    await seen('Cine vine la alergare?');
+    const options = visible(page.getByRole('button', { name: 'Opțiuni pentru mesajul lui Dana Străină' })).first();
+    await options.click();
+    await button('Reacționează cu 🔥').click();
+    await visible(page.getByRole('button', { name: 'Reacții 🔥: 1, inclusiv a ta' })).first().waitFor();
+    await eventually(async () => {
+      const message = (await api('user', '/chat', { token: dana.token })).find((m) => m.text === 'Cine vine la alergare?');
+      if (JSON.stringify(message?.reactions) !== JSON.stringify([{ emoji: '🔥', count: 1, mine: false }])) {
+        throw new Error(`Dana nu vede reacția: ${JSON.stringify(message?.reactions)}`);
+      }
+    });
+    await options.click();
+    await button('Răspunde').click();
+    await seen('Răspunzi lui Dana Străină');
+    await visible(page.getByPlaceholder('Scrie un mesaj pentru comunitate…')).fill('Eu vin!');
+    await button('Trimite').click();
+    await seen('Eu vin!');
+    const reply = (await api('user', '/chat', { token: dana.token })).find((m) => m.text === 'Eu vin!');
+    if (reply?.replyTo?.text !== 'Cine vine la alergare?') throw new Error(`Răspunsul nu are citatul: ${JSON.stringify(reply)}`);
+
+    // Mesaj privat: Dana îmi scrie, conversația apare cu mesaj nou în Social → Chat, iar eu răspund.
+    await api('user', `/dm/${me.username}`, { token: dana.token, body: { text: 'Mersi că vii! Ne vedem la 7.' } });
+    await page.goto(`${BASE}/social`);
+    await visible(page.getByRole('tab', { name: 'Chat' })).click();
+    await seen('Mesaje private');
+    await visible(page.getByRole('button', { name: 'Dana Străină, Mesaje noi', exact: true })).first().click();
+    await waitPath(`/chat/dm/${dana.username}`);
+    await seen('Mersi că vii! Ne vedem la 7.');
+    await visible(page.getByPlaceholder('Scrie un mesaj privat…')).fill('Sigur, la 7 la parc.');
+    await button('Trimite').click();
+    await seen('Sigur, la 7 la parc.');
+    await seen(/· Trimis$/);
+    const thread = await api('user', `/dm/${me.username}`, { token: dana.token });
+    if (!thread.messages.some((m) => m.text === 'Sigur, la 7 la parc.' && !m.mine)) {
+      throw new Error(`Dana nu vede mesajul privat: ${JSON.stringify(thread)}`);
+    }
+    // Dana a deschis conversația: la următoarea reîmprospătare mesajul meu apare ca văzut.
+    await seen(/· Văzut$/);
+    const general = await api('user', '/chat', { token: dana.token });
+    if (general.some((m) => m.text === 'Sigur, la 7 la parc.')) throw new Error('Mesajul privat a ajuns în comunitate');
+    await button('Închide').click();
+    await waitPath('/social');
   });
 
   await step('invitație în comunitate: cineva cere să participe, organizatorul aprobă', async () => {

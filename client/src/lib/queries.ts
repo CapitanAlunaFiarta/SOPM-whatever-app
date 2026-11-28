@@ -8,8 +8,9 @@ import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
 import type {
-  ActivityChat, ActivityDays, ActivityPreview, AdminUser, CalendarLink, CalendarMonth, ChatMessage, CompletionResult, Favor, FavorInput, FavorList,
-  Friend, FriendStatus, LeaderboardEntry, Profile, Recap, Session, Task, TaskInput, TaskMessage, User,
+  ActivityChat, ActivityDays, ActivityPreview, AdminUser, CalendarLink, CalendarMonth, ChatMessage, CompletionResult, Conversation,
+  DirectMessage, DirectThread, Favor, FavorInput, FavorList, Friend, FriendStatus, LeaderboardEntry, Profile, Reaction, Recap, Session,
+  Task, TaskInput, TaskMessage, User,
 } from './types';
 
 export const keys = {
@@ -31,6 +32,8 @@ export const keys = {
   calendar: ['calendar'] as const,
   calendarLink: ['calendar-link'] as const,
   activityDays: ['activity-days'] as const,
+  conversations: ['conversations'] as const,
+  direct: (username: string) => ['direct', username] as const,
 };
 
 export function useMe() {
@@ -300,7 +303,8 @@ export function useTaskMessages(id: number, enabled: boolean) {
 export function useSendTaskMessage(id: number) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (text: string) => request<TaskMessage>('task', `/tasks/${id}/messages`, { method: 'POST', body: { text } }),
+    mutationFn: ({ text, replyTo }: { text: string; replyTo?: number | null }) =>
+      request<TaskMessage>('task', `/tasks/${id}/messages`, { method: 'POST', body: { text, replyTo: replyTo ?? null } }),
     onSuccess: () => Promise.all([
       client.invalidateQueries({ queryKey: keys.taskMessages(id) }),
       client.invalidateQueries({ queryKey: keys.tasks }),
@@ -369,8 +373,111 @@ export function useFavorPhoto(id: number, enabled: boolean) {
 export function useSendChat() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (text: string) => request('user', '/chat', { method: 'POST', body: { text } }),
+    mutationFn: ({ text, replyTo }: { text: string; replyTo?: number | null }) =>
+      request('user', '/chat', { method: 'POST', body: { text, replyTo: replyTo ?? null } }),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.chat }),
+  });
+}
+
+type ReactionResult = { id: number; reactions: Reaction[] };
+
+/** Pune reacția în cache imediat (fără să aștepte reîmprospătarea listei). */
+function withReactions<T extends { id: number; reactions?: Reaction[] }>(items: T[] | undefined, result: ReactionResult) {
+  return items?.map((item) => (item.id === result.id ? { ...item, reactions: result.reactions } : item));
+}
+
+/** Reacția mea la un mesaj din comunitate (aceeași a doua oară o scoate). */
+export function useReactChat() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, emoji }: { id: number; emoji: string }) =>
+      request<ReactionResult>('user', `/chat/${id}/reactions`, { method: 'POST', body: { emoji } }),
+    onSuccess: (result) => client.setQueryData<ChatMessage[]>(keys.chat, (items) => withReactions(items, result)),
+  });
+}
+
+/** Reacția mea la un mesaj din chatul unei activități. */
+export function useReactTaskMessage(taskId: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, emoji }: { id: number; emoji: string }) =>
+      request<ReactionResult>('task', `/tasks/${taskId}/messages/${id}/reactions`, { method: 'POST', body: { emoji } }),
+    onSuccess: (result) => client.setQueryData<TaskMessage[]>(keys.taskMessages(taskId), (items) => withReactions(items, result)),
+  });
+}
+
+export function useDeleteTaskMessage(taskId: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => request('task', `/tasks/${taskId}/messages/${id}`, { method: 'DELETE' }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.taskMessages(taskId) }),
+      client.invalidateQueries({ queryKey: keys.activityChats }),
+    ]),
+  });
+}
+
+/** Conversațiile private, cu ultimul mesaj și câte mesaje necitite am în fiecare. */
+export function useConversations() {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.conversations,
+    enabled: status === 'signedIn',
+    refetchInterval: 20_000,
+    refetchOnMount: 'always',
+    queryFn: () => request<Conversation[]>('user', '/dm'),
+  });
+}
+
+/** Conversația cu cineva; se reîmprospătează cât timp e deschisă (și marchează mesajele primite ca citite). */
+export function useDirectMessages(username: string) {
+  const { status } = useAuth();
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: keys.direct(username),
+    enabled: status === 'signedIn' && Boolean(username),
+    refetchInterval: 5000,
+    queryFn: async () => {
+      const thread = await request<DirectThread>('user', `/dm/${encodeURIComponent(username)}`);
+      // Mesajele primite necitite tocmai au devenit citite: lista de chaturi și numărul de pe tab se actualizează.
+      if (thread.messages.some((message) => !message.mine && !message.read)) {
+        void client.invalidateQueries({ queryKey: keys.conversations });
+      }
+      return thread;
+    },
+  });
+}
+
+export function useSendDirect(username: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ text, replyTo }: { text: string; replyTo?: number | null }) =>
+      request<DirectMessage>('user', `/dm/${encodeURIComponent(username)}`, { method: 'POST', body: { text, replyTo: replyTo ?? null } }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.direct(username) }),
+      client.invalidateQueries({ queryKey: keys.conversations }),
+    ]),
+  });
+}
+
+export function useReactDirect(username: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, emoji }: { id: number; emoji: string }) =>
+      request<ReactionResult>('user', `/dm/messages/${id}/reactions`, { method: 'POST', body: { emoji } }),
+    onSuccess: (result) => client.setQueryData<DirectThread>(keys.direct(username),
+      (thread) => (thread ? { ...thread, messages: withReactions(thread.messages, result) ?? [] } : thread)),
+  });
+}
+
+export function useDeleteDirect(username: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => request('user', `/dm/messages/${id}`, { method: 'DELETE' }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.direct(username) }),
+      client.invalidateQueries({ queryKey: keys.conversations }),
+    ]),
   });
 }
 

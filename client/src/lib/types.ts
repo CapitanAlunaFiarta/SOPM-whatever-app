@@ -106,6 +106,13 @@ export type TaskChat = {
   messageCount: number;
 };
 
+/** Reacțiile permise (aceleași pe server), în ordinea din meniu. */
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const;
+/** Reacțiile la un mesaj: câte de fiecare și dacă una e a mea. */
+export type Reaction = { emoji: string; count: number; mine: boolean };
+/** Citatul de deasupra unui răspuns (începutul mesajului citat). */
+export type ReplyPreview = { id: number; username: string; fullName: string; text: string };
+
 export type TaskMessage = {
   id: number;
   text: string;
@@ -114,6 +121,28 @@ export type TaskMessage = {
   fullName: string;
   mine: boolean;
   avatarVersion?: number | null;
+  replyTo?: ReplyPreview | null;
+  reactions?: Reaction[];
+};
+
+/** Un mesaj privat (între prieteni). `read` = celălalt l-a văzut (pentru mesajele mele). */
+export type DirectMessage = TaskMessage & { read?: boolean };
+
+/** O conversație privată din lista de chaturi. */
+export type Conversation = {
+  username: string;
+  fullName: string;
+  avatarVersion?: number | null;
+  /** Încă sunteți prieteni (altfel conversația e doar de citit). */
+  canWrite: boolean;
+  unread: number;
+  lastMessage: { id: number; text: string; createdAt: string; mine: boolean };
+};
+
+export type DirectThread = {
+  with: { username: string; fullName: string; avatarVersion?: number | null };
+  canWrite: boolean;
+  messages: DirectMessage[];
 };
 
 /** Pot confirma și deschide chatul: sunt proprietarul sau am acceptat invitația. */
@@ -165,6 +194,8 @@ export type ChatMessage = {
   kind?: ChatKind;
   payload?: Partial<StreakPayload & ActivityPayload & UpdatePayload> | null;
   senderAvatar?: number | null;
+  replyTo?: ReplyPreview | null;
+  reactions?: Reaction[];
 };
 
 /** Relația mea cu cineva: prieteni, cerere primită (INCOMING) sau trimisă (OUTGOING). */

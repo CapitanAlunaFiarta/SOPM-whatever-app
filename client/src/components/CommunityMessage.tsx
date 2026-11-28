@@ -9,59 +9,77 @@ import { confirmAction, showMessage } from '@/lib/dialogs';
 import { useJoinActivity, useLatestRelease } from '@/lib/queries';
 import type { ActivityPayload, ActivityPreview, ChatMessage } from '@/lib/types';
 
+import { Avatar } from './Avatar';
 import { CATEGORY_ICONS, isCategory } from './categories';
+import { MessageOptionsButton, MessageShell, ReactionChips, ReplyQuote } from './ChatParts';
 import { openProfile } from './JoinRequests';
 import { colors, radius } from './theme';
-import { AppText, Button, IconButton, Row } from './ui';
+import { AppText, Button, Row } from './ui';
 
-/** Textul scurt al unui mesaj din comunitate, pentru lista de chaturi. */
-export function communityPreview(message: ChatMessage, t: ReturnType<typeof useI18n>['t']): string {
+/** Ce spune un mesaj din comunitate, pe scurt (fără nume): pentru citatul unui răspuns și meniul mesajului. */
+export function communityText(message: ChatMessage, t: ReturnType<typeof useI18n>['t']): string {
   const payload = message.payload ?? {};
   if (message.kind === 'STREAK') return t('chats.streakPreview', { name: message.senderName });
   if (message.kind === 'ACTIVITY' && payload.title) return t('chats.activityPreview', { title: payload.title });
   if (message.kind === 'UPDATE' && payload.version) return t('chats.updatePreview', { version: payload.version });
-  return `${message.senderName}: ${message.text}`;
+  return message.text;
 }
 
-/** Un mesaj din chatul comunității: text, streak arătat, invitație la o activitate sau anunț de versiune. */
-export function CommunityMessage({ message, preview, previewsLoading, canDelete, onDelete, mine }: {
+/** Textul scurt al unui mesaj din comunitate, pentru lista de chaturi. */
+export function communityPreview(message: ChatMessage, t: ReturnType<typeof useI18n>['t']): string {
+  return message.kind === 'TEXT' || !message.kind ? `${message.senderName}: ${message.text}` : communityText(message, t);
+}
+
+/**
+ * Un mesaj din chatul comunității: text, streak arătat, invitație la o activitate sau anunț de versiune; cu poza
+ * celui care l-a scris, citatul mesajului la care răspunde și reacțiile. „…” (sau apăsarea lungă pe telefon)
+ * deschide meniul: reacții, răspuns, ștergere.
+ */
+export function CommunityMessage({ message, preview, previewsLoading, mine, quoteText, onOptions, onReact }: {
   message: ChatMessage;
   preview?: ActivityPreview;
   previewsLoading?: boolean;
-  canDelete?: boolean;
-  onDelete?: () => void;
   /** Mesajul meu: numele apare în altă culoare, ca în chatul activităților. */
   mine?: boolean;
+  /** Textul citat, dacă mesajul citat e încă în listă (altfel cel trimis de server). */
+  quoteText?: string;
+  onOptions?: () => void;
+  onReact?: (emoji: string) => void;
 }) {
   const { t, formatTime } = useI18n();
   const system = message.senderRole === 'SYSTEM';
   return (
-    <View style={styles.message}>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <Pressable disabled={system} accessibilityRole={system ? undefined : 'link'}
-          accessibilityLabel={system ? message.senderName : t('chat.openProfile', { name: message.senderName })}
-          onPress={() => openProfile(message.senderUsername)} style={{ flexShrink: 1 }}>
-          <Text style={[styles.sender, mine && { color: colors.violet }, system && { color: colors.red }]} numberOfLines={1}>
-            {message.senderName}{' '}
-            {system ? null : <Text style={styles.handle}>@{message.senderUsername}</Text>}
-            {message.senderRole === 'ADMIN' ? <Text style={styles.admin}>  {t('chat.admin')}</Text> : null}
-          </Text>
-        </Pressable>
-        <Row gap={4}>
-          <AppText variant="small">{formatTime(message.createdAt)}</AppText>
-          {canDelete && onDelete ? (
-            <IconButton icon="trash-outline" label={t('chat.deleteLabel')} tone="danger" onPress={onDelete} />
-          ) : null}
-        </Row>
+    <MessageShell onLongPress={onOptions} style={styles.message}>
+      <Row gap={10} style={{ alignItems: 'flex-start' }}>
+        <Avatar username={message.senderUsername} name={message.senderName} version={system ? null : message.senderAvatar} size={34} />
+        <View style={{ flex: 1, gap: 6 }}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Pressable disabled={system} accessibilityRole={system ? undefined : 'link'}
+              accessibilityLabel={system ? message.senderName : t('chat.openProfile', { name: message.senderName })}
+              onPress={() => openProfile(message.senderUsername)} style={{ flexShrink: 1 }}>
+              <Text style={[styles.sender, mine && { color: colors.violet }, system && { color: colors.red }]} numberOfLines={1}>
+                {message.senderName}{' '}
+                {system ? null : <Text style={styles.handle}>@{message.senderUsername}</Text>}
+                {message.senderRole === 'ADMIN' ? <Text style={styles.admin}>  {t('chat.admin')}</Text> : null}
+              </Text>
+            </Pressable>
+            <Row gap={2}>
+              <AppText variant="small">{formatTime(message.createdAt)}</AppText>
+              {onOptions ? <MessageOptionsButton name={message.senderName} onPress={onOptions} /> : null}
+            </Row>
+          </Row>
+          {message.replyTo ? <ReplyQuote reply={message.replyTo} text={quoteText} /> : null}
+          {message.kind === 'STREAK' ? <StreakBody message={message} />
+            : message.kind === 'ACTIVITY' && message.payload?.taskId ? (
+              <ActivityInviteCard payload={message.payload as ActivityPayload} preview={preview} loading={previewsLoading}
+                ownerName={message.senderName} />
+            ) : message.kind === 'UPDATE' && message.payload?.version ? (
+              <UpdateBody version={message.payload.version} build={Number(message.payload.build ?? 0)} url={message.payload.url} />
+            ) : <AppText>{message.text}</AppText>}
+          <ReactionChips reactions={message.reactions} onToggle={onReact} />
+        </View>
       </Row>
-      {message.kind === 'STREAK' ? <StreakBody message={message} />
-        : message.kind === 'ACTIVITY' && message.payload?.taskId ? (
-          <ActivityInviteCard payload={message.payload as ActivityPayload} preview={preview} loading={previewsLoading}
-            ownerName={message.senderName} />
-        ) : message.kind === 'UPDATE' && message.payload?.version ? (
-          <UpdateBody version={message.payload.version} build={Number(message.payload.build ?? 0)} url={message.payload.url} />
-        ) : <AppText>{message.text}</AppText>}
-    </View>
+    </MessageShell>
   );
 }
 

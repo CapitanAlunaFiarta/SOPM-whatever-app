@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
@@ -19,7 +19,7 @@ import { useAuth } from '@/lib/auth';
 import { communityChatKey, taskChatKey, useSeenChats } from '@/lib/chatSeen';
 import { confirmAction } from '@/lib/dialogs';
 import {
-  isFriend, useActivityChats, useChat, useFriendAction, useFriends, useLeaderboard,
+  isFriend, useActivityChats, useChat, useConversations, useFriendAction, useFriends, useLeaderboard,
 } from '@/lib/queries';
 import type { Friend } from '@/lib/types';
 
@@ -63,17 +63,22 @@ export default function SocialScreen() {
   );
 }
 
-/** Toate chaturile mele: comunitatea și chaturile activităților de grup, cu ultimul mesaj și ce e nou. */
+/**
+ * Toate chaturile mele: comunitatea, mesajele private cu prietenii și chaturile activităților de grup, cu ultimul
+ * mesaj și ce e nou.
+ */
 function ChatList() {
   const { t, tp, formatTime } = useI18n();
   const { user } = useAuth();
   const community = useChat();
   const chats = useActivityChats();
+  const conversations = useConversations();
+  const [picking, setPicking] = useState(false);
   const { seen } = useSeenChats();
   const latest = community.data?.[0];
   const communityUnread = Boolean(latest && latest.senderUsername !== user?.username
     && latest.id > (seen[communityChatKey] ?? 0));
-  const error = community.error ?? chats.error;
+  const error = community.error ?? chats.error ?? conversations.error;
 
   return (
     <View style={{ gap: 10 }}>
@@ -82,6 +87,32 @@ function ChatList() {
         preview={latest ? communityPreview(latest, t) : t('chats.communityHint')}
         time={latest ? formatTime(latest.createdAt) : undefined}
         onPress={() => router.push('/chat/community')} />
+
+      <Row style={{ justifyContent: 'space-between', marginTop: 6 }}>
+        <AppText variant="heading">{t('dm.title')}</AppText>
+        <Button compact variant={picking ? 'primary' : 'secondary'} icon="create-outline" title={t('dm.new')}
+          onPress={() => setPicking((value) => !value)} />
+      </Row>
+      {picking ? (
+        <FriendPicker existing={(conversations.data ?? []).map((item) => item.username)} onPick={(username) => {
+          setPicking(false);
+          router.push(`/chat/dm/${encodeURIComponent(username)}`);
+        }} />
+      ) : null}
+      {(conversations.data ?? []).length === 0 && !conversations.isLoading ? (
+        <AppText variant="small">{t('dm.empty')}</AppText>
+      ) : (conversations.data ?? []).map((item) => {
+        const last = item.lastMessage;
+        const unread = item.unread > 0;
+        return (
+          <ChatRow key={item.username} title={item.fullName} unread={unread} time={formatTime(last.createdAt)}
+            avatar={<Avatar username={item.username} name={item.fullName} version={item.avatarVersion} size={42} />}
+            preview={last.mine ? `${t('chats.you')}: ${last.text}` : last.text}
+            meta={[unread ? tp('plural.unreadMessages', item.unread) : '', item.canWrite ? '' : t('dm.readOnlyShort')]
+              .filter(Boolean).join(' · ') || undefined}
+            onPress={() => router.push(`/chat/dm/${encodeURIComponent(item.username)}`)} />
+        );
+      })}
 
       <AppText variant="heading" style={{ marginTop: 6 }}>{t('chats.activities')}</AppText>
       {(chats.data ?? []).length === 0 && !chats.isLoading ? (
@@ -102,17 +133,45 @@ function ChatList() {
   );
 }
 
-function ChatRow({ icon, tone, title, preview, time, meta, unread, onPress }: {
-  icon: IconName; tone: string; title: string; preview: string; time?: string; meta?: string; unread?: boolean;
+/** Prietenii cărora le pot scrie: alegerea unuia deschide conversația (cei cu care am deja una apar la final). */
+function FriendPicker({ existing, onPick }: { existing: string[]; onPick: (username: string) => void }) {
+  const { t } = useI18n();
+  const friends = useFriends();
+  const accepted = (friends.data ?? []).filter(isFriend)
+    .sort((a, b) => Number(existing.includes(a.username)) - Number(existing.includes(b.username)));
+  return (
+    <Card style={{ borderColor: colors.indigo }}>
+      <AppText variant="heading">{t('dm.pickFriend')}</AppText>
+      {friends.isLoading ? <AppText variant="muted">{t('common.loading')}</AppText>
+        : accepted.length === 0 ? <AppText variant="small">{t('dm.noFriends')}</AppText>
+        : accepted.map((friend) => (
+          <Pressable key={friend.username} accessibilityRole="button" accessibilityLabel={t('dm.with', { name: friend.fullName })}
+            onPress={() => onPick(friend.username)} style={({ pressed }) => [styles.pickerRow, pressed && { opacity: 0.8 }]}>
+            <Avatar username={friend.username} name={friend.fullName} version={friend.avatarVersion} size={32} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.chatTitle} numberOfLines={1}>{friend.fullName}</Text>
+              <AppText variant="small">@{friend.username}</AppText>
+            </View>
+            <Ionicons name="chatbubble-outline" size={18} color={colors.cyan} />
+          </Pressable>
+        ))}
+    </Card>
+  );
+}
+
+function ChatRow({ icon, tone, avatar, title, preview, time, meta, unread, onPress }: {
+  icon?: IconName; tone?: string; avatar?: ReactNode; title: string; preview: string; time?: string; meta?: string; unread?: boolean;
   onPress: () => void;
 }) {
   const { t } = useI18n();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={unread ? `${title}, ${t('chats.unread')}` : title} onPress={onPress}
       style={({ pressed }) => [styles.chatRow, unread && styles.chatRowUnread, pressed && { opacity: 0.8 }]}>
-      <View style={[styles.chatIcon, { backgroundColor: `${tone}22` }]}>
-        <Ionicons name={icon} size={20} color={tone} />
-      </View>
+      {avatar ?? (
+        <View style={[styles.chatIcon, { backgroundColor: `${tone ?? colors.cyan}22` }]}>
+          <Ionicons name={icon ?? 'chatbubbles-outline'} size={20} color={tone ?? colors.cyan} />
+        </View>
+      )}
       <View style={{ flex: 1, gap: 2 }}>
         <Row style={{ justifyContent: 'space-between' }} gap={8}>
           <Text style={styles.chatTitle} numberOfLines={1}>{title}</Text>
@@ -200,6 +259,8 @@ function FriendsSection() {
             <Card key={friend.username}>
               <PersonRow friend={friend} />
               <Row style={{ justifyContent: 'flex-end' }}>
+                <Button compact variant="secondary" icon="chatbubble-outline" title={t('dm.send')}
+                  onPress={() => router.push(`/chat/dm/${encodeURIComponent(friend.username)}`)} />
                 <Button compact variant="ghost" title={t('common.delete')} onPress={async () => {
                   if (await confirmAction(t('friends.removeConfirm'), `@${friend.username}`, t('common.delete'))) {
                     await run(friend.username, 'remove');
@@ -297,6 +358,10 @@ const styles = StyleSheet.create({
   chatPreview: { color: colors.muted, fontSize: 13.5, flex: 1 },
   chatMeta: { color: colors.faint, fontSize: 12 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.cyan },
+  pickerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md,
+    backgroundColor: colors.elevated, borderWidth: 1, borderColor: colors.border,
+  },
   separator: { borderTopWidth: 1, borderTopColor: colors.border },
   rank: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 4 },
   me: { backgroundColor: `${colors.indigo}22`, borderRadius: 10 },
