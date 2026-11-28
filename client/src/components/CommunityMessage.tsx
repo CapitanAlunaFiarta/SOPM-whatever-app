@@ -25,12 +25,14 @@ export function communityPreview(message: ChatMessage, t: ReturnType<typeof useI
 }
 
 /** Un mesaj din chatul comunității: text, streak arătat, invitație la o activitate sau anunț de versiune. */
-export function CommunityMessage({ message, preview, previewsLoading, canDelete, onDelete }: {
+export function CommunityMessage({ message, preview, previewsLoading, canDelete, onDelete, mine }: {
   message: ChatMessage;
   preview?: ActivityPreview;
   previewsLoading?: boolean;
   canDelete?: boolean;
   onDelete?: () => void;
+  /** Mesajul meu: numele apare în altă culoare, ca în chatul activităților. */
+  mine?: boolean;
 }) {
   const { t, formatTime } = useI18n();
   const system = message.senderRole === 'SYSTEM';
@@ -40,7 +42,7 @@ export function CommunityMessage({ message, preview, previewsLoading, canDelete,
         <Pressable disabled={system} accessibilityRole={system ? undefined : 'link'}
           accessibilityLabel={system ? message.senderName : t('chat.openProfile', { name: message.senderName })}
           onPress={() => openProfile(message.senderUsername)} style={{ flexShrink: 1 }}>
-          <Text style={[styles.sender, system && { color: colors.red }]} numberOfLines={1}>
+          <Text style={[styles.sender, mine && { color: colors.violet }, system && { color: colors.red }]} numberOfLines={1}>
             {message.senderName}{' '}
             {system ? null : <Text style={styles.handle}>@{message.senderUsername}</Text>}
             {message.senderRole === 'ADMIN' ? <Text style={styles.admin}>  {t('chat.admin')}</Text> : null}

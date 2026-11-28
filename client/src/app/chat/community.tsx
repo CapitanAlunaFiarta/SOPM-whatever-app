@@ -92,7 +92,8 @@ export default function CommunityChatScreen() {
             <View key={message.id} style={index > 0 ? styles.separator : undefined}>
               <CommunityMessage message={message} previewsLoading={previews.isLoading}
                 preview={message.payload?.taskId ? previewById.get(Number(message.payload.taskId)) : undefined}
-                canDelete={user?.role === 'ADMIN'}
+                canDelete={user?.role === 'ADMIN' || (message.senderRole !== 'SYSTEM' && message.senderUsername === user?.username)}
+                mine={message.senderUsername === user?.username}
                 onDelete={async () => {
                   if (await confirmAction(t('chat.deleteConfirm'), message.text, t('common.delete'))) remove.mutate(message.id);
                 }} />

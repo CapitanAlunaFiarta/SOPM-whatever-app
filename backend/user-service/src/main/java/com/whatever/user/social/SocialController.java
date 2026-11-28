@@ -115,9 +115,17 @@ public class SocialController {
         return Map.of("ok", true, "streak", streak);
     }
 
+    /** Administratorul șterge orice mesaj; ceilalți doar mesajele lor (nu și anunțurile botului). */
     @DeleteMapping("/chat/{id}")
     public Map<String, Object> deleteChat(@AuthenticationPrincipal AuthUser auth, @PathVariable long id) {
-        if (!auth.isAdmin()) throw new ApiException(403, "Acces interzis.");
+        if (!auth.isAdmin()) {
+            List<Map<String, Object>> found = db.queryForList("SELECT sender_username, sender_role FROM chat_messages WHERE id = ?", id);
+            if (found.isEmpty()) throw new ApiException(404, "Mesajul nu există.");
+            String me = String.valueOf(users.require(auth.email()).get("username"));
+            if ("SYSTEM".equals(found.get(0).get("sender_role")) || !me.equals(found.get(0).get("sender_username"))) {
+                throw new ApiException(403, "Poți șterge doar mesajele tale.");
+            }
+        }
         db.update("DELETE FROM chat_messages WHERE id = ?", id);
         return Map.of("ok", true);
     }

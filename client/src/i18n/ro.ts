@@ -505,6 +505,15 @@ export const ro = {
   'update.update': 'Actualizează',
   // Versiunea cea mai nouă
   'update.newestIs': 'Între timp a apărut versiunea {version}.',
+  // Optimizări: server care pornește, clasament, share
+  'server.waking': 'Serverul pornește după o pauză (pe planul gratuit doarme după 15 minute fără folosire). Poate dura până la un minut…',
+  'leaderboard.all': 'Toți',
+  'leaderboard.friendsOnly': 'Prietenii mei',
+  'leaderboard.noFriends': 'Adaugă prieteni ca să vă comparați streak-urile.',
+  'share.streak': 'Distribuie streak-ul',
+  'share.streakText': 'Am un streak de {days} în Whatever! 🔥 {url}',
+  'share.copied': 'Textul a fost copiat. Lipește-l unde vrei.',
+  'home.streakRisk': 'Mai ai până la miezul nopții să-ți păstrezi streak-ul!',
   'plural.days': { one: '{count} zi', few: '{count} zile', other: '{count} de zile' },
   'plural.points': { one: '{count} punct', few: '{count} puncte', other: '{count} de puncte' },
   'plural.accounts': { one: '{count} cont', few: '{count} conturi', other: '{count} de conturi' },
