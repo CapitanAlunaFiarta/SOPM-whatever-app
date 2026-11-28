@@ -142,6 +142,85 @@ async function main() {
   const recurringAgain = await call('POST', `${TASK}/tasks/${recurring.json?.id}/verify-complete`, { token: tokenA, body: {} });
   check('recurent: a doua oară azi → 409', recurringAgain.status === 409, recurringAgain);
 
+  // --- descriere, repetare la N zile/săptămâni, calendarul lunii și abonarea .ics (Google Calendar)
+  const plusDays = (date, days) => {
+    const value = new Date(`${date}T12:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + days);
+    return value.toISOString().slice(0, 10);
+  };
+  const football = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({
+    title: 'Fotbal, la două săptămâni', description: '  Adu mingea; ne vedem la poartă.\n', category: 'SPORT', isRecurring: true,
+    repeatEvery: 2, repeatUnit: 'week', requiresLocation: true, latitude: 45.6525, longitude: 25.5888, radius: 300,
+  }) });
+  check('descrierea și repetarea se salvează', football.status === 200 && football.json?.description === 'Adu mingea; ne vedem la poartă.'
+    && football.json?.repeatEvery === 2 && football.json?.repeatUnit === 'WEEK' && football.json?.nextOn === null, football.json);
+  const footballDone = await call('POST', `${TASK}/tasks/${football.json?.id}/verify-complete`, { token: tokenA,
+    body: { latitude: 45.6526, longitude: 25.5889, accuracy: 8 } });
+  check('repetare: revine peste 2 săptămâni, nu mâine', footballDone.status === 200
+    && footballDone.json?.task?.dueDate === plusDays(today, 14) && footballDone.json?.task?.nextOn === plusDays(today, 14)
+    && footballDone.json?.task?.status === 'Upcoming' && footballDone.json?.task?.streakCount === 1, footballDone.json?.task);
+  const later = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({
+    title: 'Începe mâine', description: 'Pornim de la parc.', isRecurring: true, repeatEvery: 3, repeatUnit: 'DAY', dueDate: tomorrow,
+  }) });
+  const early = await call('POST', `${TASK}/tasks/${later.json?.id}/verify-complete`, { token: tokenA, body: {} });
+  const earlyEn = await call('POST', `${TASK}/tasks/${later.json?.id}/verify-complete`, { token: tokenA, headers: { 'Accept-Language': 'en' }, body: {} });
+  check('recurentă: nu se confirmă înainte de ziua ei (409, tradus)', later.json?.nextOn === tomorrow && early.status === 409
+    && early.json?.error === `Activitatea poate fi confirmată din ${tomorrow}.`
+    && earlyEn.json?.error === `The activity can be confirmed from ${tomorrow}.`, [later.json?.nextOn, early.json, earlyEn.json]);
+  const oldClientEdit = await call('PUT', `${TASK}/tasks/${later.json?.id}`, { token: tokenA, body: baseTask({
+    title: 'Începe mâine (editat)', isRecurring: true, dueDate: tomorrow,
+  }) });
+  check('editare de la o aplicație veche: descrierea și intervalul rămân', oldClientEdit.status === 200
+    && oldClientEdit.json?.description === 'Pornim de la parc.' && oldClientEdit.json?.repeatEvery === 3 && oldClientEdit.json?.repeatUnit === 'DAY', oldClientEdit.json);
+  const clearedDescription = await call('PUT', `${TASK}/tasks/${later.json?.id}`, { token: tokenA, body: baseTask({
+    title: 'Începe mâine', description: '', isRecurring: true, repeatEvery: 1, repeatUnit: 'WEEK', dueDate: tomorrow,
+  }) });
+  check('editare: descrierea se poate goli, unitatea se schimbă', clearedDescription.json?.description === ''
+    && clearedDescription.json?.repeatUnit === 'WEEK' && clearedDescription.json?.repeatEvery === 1, clearedDescription.json);
+  const badWeeks = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ isRecurring: true, repeatEvery: 53, repeatUnit: 'WEEK' }) });
+  const badUnit = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ isRecurring: true, repeatEvery: 1, repeatUnit: 'MONTH' }) });
+  const zeroDays = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ isRecurring: true, repeatEvery: 0 }) });
+  const longText = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ description: 'x'.repeat(2001) }) });
+  check('repetare și descriere invalide → 400', badWeeks.status === 400 && badUnit.status === 400 && zeroDays.status === 400
+    && longText.status === 400 && /2000/.test(longText.json?.error || ''), [badWeeks.json, badUnit.json, zeroDays.json, longText.json]);
+
+  const calendarMonth = await call('GET', `${TASK}/tasks/calendar?month=${today.slice(0, 7)}`, { token: tokenA });
+  check('calendar: ce am finalizat azi, cu titlul', calendarMonth.status === 200 && calendarMonth.json?.month === today.slice(0, 7)
+    && calendarMonth.json.completions?.some((item) => item.date === today && item.kind === 'TASK' && item.id === football.json?.id
+      && item.title === 'Fotbal, la două săptămâni' && item.category === 'SPORT'), calendarMonth.json);
+  const calendarOther = await call('GET', `${TASK}/tasks/calendar?month=${today.slice(0, 7)}`, { token: tokenB });
+  const calendarBad = await call('GET', `${TASK}/tasks/calendar?month=2026-13`, { token: tokenA });
+  check('calendar: doar finalizările mele; lună invalidă → 400', calendarOther.status === 200
+    && !calendarOther.json?.completions?.some((item) => item.id === football.json?.id) && calendarBad.status === 400, calendarOther.json);
+  const feedLink = await call('GET', `${TASK}/tasks/calendar/link`, { token: tokenA });
+  const feedLinkAgain = await call('GET', `${TASK}/tasks/calendar/link`, { token: tokenA });
+  check('abonare: link secret, același la a doua cerere', feedLink.status === 200 && /^[A-Za-z0-9_-]{32}$/.test(feedLink.json?.token || '')
+    && feedLinkAgain.json?.token === feedLink.json?.token && feedLink.json?.lastFetchedAt === null, feedLink.json);
+  const feed = await call('GET', `${TASK}/tasks/calendar/feed/${feedLink.json?.token}.ics?lang=en`);
+  const ics = feed.text.replace(/\r\n /g, '');
+  check('abonare: fișier .ics fără autentificare', feed.status === 200 && (feed.headers.get('content-type') || '').startsWith('text/calendar')
+    && ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.includes('X-WR-CALNAME:Whatever — my activities\r\n'), feed.text.slice(0, 300));
+  const footballEvent = ics.split('BEGIN:VEVENT').find((event) => event.includes(`UID:whatever-task-${football.json?.id}@`)) ?? '';
+  check('abonare: activitatea recurentă are regula și ziua următoare', footballEvent.includes('SUMMARY:Fotbal\\, la două săptămâni\r\n')
+    && footballEvent.includes('RRULE:FREQ=WEEKLY;INTERVAL=2\r\n')
+    && footballEvent.includes(`DTSTART;VALUE=DATE:${plusDays(today, 14).replace(/-/g, '')}\r\n`), footballEvent || ics);
+  check('abonare: locația și descrierea (scăpate ca în RFC 5545)', footballEvent.includes('GEO:45.652500;25.588800\r\n')
+    && footballEvent.includes('DESCRIPTION:Adu mingea\\; ne vedem la poartă.\\n\\nOpen in Whatever: '), footballEvent || ics);
+  const longLines = feed.text.split('\r\n').filter((line) => Buffer.byteLength(line, 'utf8') > 75);
+  check('abonare: rânduri de cel mult 75 de octeți', longLines.length === 0, longLines);
+  const fetchedAt = await call('GET', `${TASK}/tasks/calendar/link`, { token: tokenA });
+  const feedReset = await call('POST', `${TASK}/tasks/calendar/link/reset`, { token: tokenA });
+  const oldFeed = await call('GET', `${TASK}/tasks/calendar/feed/${feedLink.json?.token}.ics`);
+  const newFeed = await call('GET', `${TASK}/tasks/calendar/feed/${feedReset.json?.token}.ics`);
+  const guessed = await call('GET', `${TASK}/tasks/calendar/feed/${'A'.repeat(32)}.ics`);
+  check('abonare: Google a citit linkul; după resetare cel vechi nu mai merge', fetchedAt.json?.lastFetchedAt !== null
+    && feedReset.status === 200 && feedReset.json?.token !== feedLink.json?.token && oldFeed.status === 404 && newFeed.status === 200
+    && guessed.status === 404 && newFeed.text.includes('X-WR-CALNAME:Whatever — activitățile mele'), [fetchedAt.json, feedReset.json, oldFeed.status, newFeed.status]);
+  const feedOther = await call('GET', `${TASK}/tasks/calendar/link`, { token: tokenB });
+  const otherIcs = await call('GET', `${TASK}/tasks/calendar/feed/${feedOther.json?.token}.ics`);
+  check('abonare: fiecare își vede doar activitățile lui', feedOther.json?.token !== feedReset.json?.token
+    && otherIcs.status === 200 && !otherIcs.text.includes('Fotbal'), otherIcs.text.slice(0, 300));
+
   // --- biometrie: câmpul vechi nu mai ocolește verificarea
   const bioTask = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Cu biometrie', requiresBiometrics: true }) });
   const bypass = await call('POST', `${TASK}/tasks/${bioTask.json?.id}/verify-complete`, { token: tokenA, body: { mobileBiometricConfirmed: true } });
@@ -386,7 +465,9 @@ async function main() {
   check('streak arătat în comunitate (valoarea de pe server)', shareStreak.status === 200 && streakChat.json?.[0]?.kind === 'STREAK'
     && streakChat.json[0].payload?.streak === shareStreak.json?.streak && streakChat.json[0].senderUsername === userA.username, streakChat.json?.[0]);
 
-  const ride = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Tură de bicicletă', category: 'SPORT', dueDate: tomorrow }) });
+  const ride = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({
+    title: 'Tură de bicicletă', description: 'Ne întâlnim la intrarea în parc.', category: 'SPORT', dueDate: tomorrow,
+  }) });
   const rid = ride.json?.id;
   const joinPrivate = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenD });
   check('o activitate netrimisă în comunitate nu primește cereri → 404', joinPrivate.status === 404, joinPrivate);
@@ -401,7 +482,8 @@ async function main() {
   const previewD = await call('GET', `${TASK}/tasks/shared?ids=${rid},999999`, { token: tokenD });
   check('previzualizare pentru oricine: fără locație și fără membri', previewD.status === 200 && previewD.json?.length === 1
     && previewD.json[0].myStatus === 'NONE' && previewD.json[0].canJoin === true && previewD.json[0].memberCount === 1
-    && previewD.json[0].maxMembers === 30 && !('latitude' in previewD.json[0]) && !('participants' in previewD.json[0]), previewD.json);
+    && previewD.json[0].maxMembers === 30 && !('latitude' in previewD.json[0]) && !('participants' in previewD.json[0])
+    && previewD.json[0].description === 'Ne întâlnim la intrarea în parc.', previewD.json);
   const ownerJoin = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenA });
   check('organizatorul nu-și cere singur participarea → 409', ownerJoin.status === 409, ownerJoin);
   const dJoins = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenD });

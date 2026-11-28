@@ -17,14 +17,16 @@ Aplicația e în română, engleză și spaniolă.
 - **Streak** = zile consecutive (ora României) cu cel puțin o activitate finalizată. Dacă ultima zi activă e mai veche decât ieri, streak-ul afișat devine 0.
 - **Puncte** = câte activități ai finalizat (vechiul „streak” al aplicației a fost convertit în puncte).
 - **Freeze**: 3 pe lună. Se folosește pe o activitate restantă: o mută pe azi și acoperă o zi ratată din streak.
-- **Recurent** = zilnic: după finalizare, activitatea rămâne activă cu scadența mâine. Se poate finaliza o dată pe zi.
+- **Recurent** = revine la fiecare N zile sau N săptămâni (zilnic = la 1 zi): după ce au confirmat toți, scadența devine
+  ziua confirmării + intervalul. Nu se poate confirma înainte de ziua în care revine (câmpul `nextOn`), cel mult o dată pe zi.
+  Intervalul: 1–365 de zile sau 1–52 de săptămâni (migrarea `008`; aplicațiile vechi primesc mai departe „zilnic”).
 - O activitate ne-recurentă se finalizează o singură dată (garantat și în baza de date, `task_completions`).
 - **Locație**: serverul verifică distanța față de pin (cu toleranța preciziei GPS, max. 50 m). În aplicația de telefon, locațiile simulate (mock) sunt respinse.
 - **Biometrie**: serverul acceptă doar un token biometric semnat, emis după
   - un passkey WebAuthn valid (web), sau
   - o semnătură Ed25519 făcută de telefon cu o cheie păstrată în Keychain/Keystore și deblocată cu amprentă/Face ID (aplicația nativă).
   Un câmp boolean trimis de client nu mai este acceptat.
-- **Activități cu prieteni**: poți invita până la 10 prieteni la o activitate.
+- **Activități cu prieteni**: o activitate are cel mult 30 de membri (tu și încă 29 de invitați sau primiți din comunitate).
   - Fiecare invitat acceptă sau refuză. Cine acceptă devine membru, își confirmă singur partea (cu aceleași verificări de locație și biometrie) și primește streak și puncte.
   - O activitate unică se încheie când au confirmat toți membrii și nu mai așteaptă nicio invitație; una zilnică trece pe mâine când au confirmat toți în ziua respectivă.
   - Chatul activității (separat de cel general) se deschide la prima acceptare și devine doar de citit la 5 zile după încheiere sau anulare.
@@ -35,6 +37,15 @@ Aplicația e în română, engleză și spaniolă.
   - Confirmarea se face doar cu camera din aplicație (fără galerie). Serverul verifică momentul pozei, locul (raza) și că e JPEG, iar cel care a cerut aprobă sau respinge poza.
   - La aprobare, cel care a făcut favorul primește streak, un punct și intrare în recap.
 - Emailurile altor utilizatori nu sunt expuse niciodată (prieteni, clasament, activități de grup, chat, favoruri).
+- **Detaliile unei activități** (`/activity/<id>`, se deschid apăsând pe card): descrierea (până la 2000 de caractere),
+  când revine, harta cu raza și butonul **Deschide în Google Maps** (traseu spre centrul razei), membrii și chatul,
+  **Adaugă în Google Calendar** (eveniment de o zi, cu repetarea ca regulă RRULE) și toate butoanele cardului.
+  Cine vede activitatea doar din comunitate (nu e membru) vede descrierea, dar nu și locația.
+- **Calendar** (Activități → Calendar): luna cu activitățile programate (cele recurente pe toate zilele în care revin),
+  restante și finalizate (`GET /api/tasks/calendar?month=YYYY-MM`).
+  - **Abonare din Google Calendar**: un link secret către un fișier `.ics` (`/api/tasks/calendar/feed/<token>.ics`, fără
+    autentificare, pentru că îl citește Google). Conține activitățile active și pe cele unice încheiate în ultimele 90 de zile;
+    linkul se poate reseta (cel vechi întoarce 404). Google reîncarcă singur calendarele abonate, la câteva ore.
 - **Categorii**: `SPORT` (activitate fizică), `STUDY` (facultate/studiu), `CHORES` (treburi, comisioane — implicită), `ENTERTAINMENT`.
   Serverul păstrează cheile, aplicația afișează numele traduse. Valorile vechi sunt acceptate și mapate
   (Sport/Sănătate → SPORT, Facultate/Proiect Echipă → STUDY, restul → CHORES; migrarea `003`).

@@ -168,7 +168,13 @@ public class TaskController {
             /** Câmpul vechi (un singur prieten); clienții noi trimit „participants”. */
             @Size(max = 100) String friend,
             /** Usernamele prietenilor invitați; null = clientul nu știe de invitații multiple. */
-            @Size(max = 29, message = "O activitate poate avea cel mult 30 de membri (cu tot cu tine).") List<@Size(max = 100) String> participants) {
+            @Size(max = 29, message = "O activitate poate avea cel mult 30 de membri (cu tot cu tine).") List<@Size(max = 100) String> participants,
+            /** Textul mai lung de pe ecranul de detalii; clienții vechi nu îl trimit (rămâne cel existent). */
+            @Size(max = 2000, message = "Descrierea poate avea cel mult 2000 de caractere.") String description,
+            /** La câte zile/săptămâni revine o activitate recurentă; lipsă = 1 (zilnic, ca la clienții vechi). */
+            Integer repeatEvery,
+            /** DAY sau WEEK; lipsă = DAY. */
+            String repeatUnit) {
     }
 
     public record MessageRequest(

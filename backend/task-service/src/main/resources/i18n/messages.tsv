@@ -78,3 +78,10 @@ Cererea de participare nu mai există.	This join request no longer exists.	Esta 
 Doar activitățile active primesc membri noi.	Only active activities can get new members.	Solo las actividades activas pueden recibir miembros nuevos.
 O activitate poate avea cel mult 30 de membri (cu tot cu tine).	An activity can have at most 30 members (including you).	Una actividad puede tener como máximo 30 miembros (contándote a ti).
 Utilizatorul nu există.	This user doesn't exist.	El usuario no existe.
+Repetare invalidă. Alege zile sau săptămâni.	Invalid repetition. Choose days or weeks.	Repetición no válida. Elige días o semanas.
+Repetarea poate fi la cel mult 365 de zile sau 52 de săptămâni.	An activity can repeat at most every 365 days or every 52 weeks.	Una actividad puede repetirse como máximo cada 365 días o cada 52 semanas.
+Activitatea poate fi confirmată din {0}.	The activity can be confirmed from {0}.	La actividad se puede confirmar a partir del {0}.
+Descrierea poate avea cel mult 2000 de caractere.	The description can have at most 2000 characters.	La descripción puede tener como máximo 2000 caracteres.
+Calendarul nu există.	The calendar does not exist.	El calendario no existe.
+Whatever — activitățile mele	Whatever — my activities	Whatever — mis actividades
+Deschide în Whatever	Open in Whatever	Abrir en Whatever

@@ -1,6 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useI18n } from '@/i18n';
@@ -115,58 +114,65 @@ function StreakBody({ message }: { message: ChatMessage }) {
   );
 }
 
-/** Invitația la o activitate de grup: oricine poate cere să participe, organizatorul aprobă. */
-function ActivityInviteCard({ payload, preview, loading, ownerName }: {
-  payload: ActivityPayload; preview?: ActivityPreview; loading?: boolean; ownerName: string;
-}) {
-  const { t, formatDate } = useI18n();
+/**
+ * Ce pot face cu o activitate văzută în comunitate: cer să particip (sau îmi retrag cererea), accept invitația,
+ * deschid chatul dacă sunt membru. Folosit în chat și pe ecranul de detalii.
+ */
+export function ActivityJoinState({ preview, title, loading }: { preview?: ActivityPreview; title: string; loading?: boolean }) {
+  const { t } = useI18n();
   const join = useJoinActivity();
-  const category = isCategory(payload.category) ? payload.category : 'CHORES';
 
-  const ask = async (cancel = false) => {
+  const ask = async (id: number, cancel = false) => {
     try {
-      const result = await join.mutateAsync({ id: payload.taskId, cancel });
+      const result = await join.mutateAsync({ id, cancel });
       // O invitație primită direct de la organizator se acceptă pe loc: deschidem chatul activității.
-      if (!cancel && result.myStatus === 'MEMBER') router.push(`/chat/${payload.taskId}`);
+      if (!cancel && result.myStatus === 'MEMBER') router.push(`/chat/${id}`);
     } catch (error) {
       showMessage(t('card.actionFailed'), errorMessage(error));
     }
   };
 
-  let state: ReactNode;
   if (!preview) {
-    state = loading ? <AppText variant="small">{t('common.loading')}</AppText>
+    return loading ? <AppText variant="small">{t('common.loading')}</AppText>
       : <AppText variant="small">{t('activityCard.unavailable')}</AppText>;
-  } else if (preview.myStatus === 'OWNER') {
-    state = <AppText variant="small">{t('activityCard.yours')}</AppText>;
-  } else if (preview.myStatus === 'MEMBER') {
-    state = (
+  }
+  if (preview.myStatus === 'OWNER') return <AppText variant="small">{t('activityCard.yours')}</AppText>;
+  if (preview.myStatus === 'MEMBER') {
+    return (
       <Row style={{ flexWrap: 'wrap' }}>
         <AppText variant="small" style={{ color: colors.green }}>{t('activityCard.member')}</AppText>
         <Button compact variant="secondary" icon="chatbubbles-outline" title={t('activityCard.openChat')}
           onPress={() => router.push(`/chat/${preview.id}`)} />
       </Row>
     );
-  } else if (preview.myStatus === 'REQUESTED') {
-    state = (
+  }
+  if (preview.myStatus === 'REQUESTED') {
+    return (
       <Row style={{ flexWrap: 'wrap' }}>
         <AppText variant="small" style={{ color: colors.cyan }}>{t('activityCard.requested')}</AppText>
         <Button compact variant="ghost" title={t('activityCard.withdraw')} loading={join.isPending} onPress={async () => {
-          if (await confirmAction(t('activityCard.withdraw'), payload.title, t('activityCard.withdraw'))) await ask(true);
+          if (await confirmAction(t('activityCard.withdraw'), title, t('activityCard.withdraw'))) await ask(preview.id, true);
         }} />
       </Row>
     );
-  } else if (preview.myStatus === 'DECLINED') {
-    state = <AppText variant="small">{t('activityCard.declined')}</AppText>;
-  } else if (preview.canJoin) {
-    state = (
+  }
+  if (preview.myStatus === 'DECLINED') return <AppText variant="small">{t('activityCard.declined')}</AppText>;
+  if (preview.canJoin) {
+    return (
       <Button compact icon="hand-right-outline" loading={join.isPending}
         title={preview.myStatus === 'INVITED' ? t('activityCard.acceptInvite') : t('activityCard.join')}
-        onPress={() => ask()} />
+        onPress={() => ask(preview.id)} />
     );
-  } else {
-    state = <AppText variant="small">{preview.full ? t('activityCard.full') : t('activityCard.closed')}</AppText>;
   }
+  return <AppText variant="small">{preview.full ? t('activityCard.full') : t('activityCard.closed')}</AppText>;
+}
+
+/** Invitația la o activitate de grup: oricine poate cere să participe, organizatorul aprobă. */
+function ActivityInviteCard({ payload, preview, loading, ownerName }: {
+  payload: ActivityPayload; preview?: ActivityPreview; loading?: boolean; ownerName: string;
+}) {
+  const { t, formatDate } = useI18n();
+  const category = isCategory(payload.category) ? payload.category : 'CHORES';
 
   return (
     <View style={styles.invite}>
@@ -174,7 +180,10 @@ function ActivityInviteCard({ payload, preview, loading, ownerName }: {
         <Ionicons name="megaphone-outline" size={15} color={colors.violet} />
         <Text style={styles.inviteLabel}>{t('activityCard.invite')}</Text>
       </Row>
-      <Row gap={10}>
+      {/* Titlul deschide detaliile (descrierea, data, câți membri are); locația exactă o văd doar membrii. */}
+      <Pressable accessibilityRole="link" accessibilityLabel={t('details.open', { title: payload.title })}
+        onPress={() => router.push(`/activity/${payload.taskId}`)}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10 }, pressed && { opacity: 0.75 }]}>
         <View style={styles.inviteIcon}>
           <Ionicons name={CATEGORY_ICONS[category] ?? 'ellipse-outline'} size={18} color={colors.cyan} />
         </View>
@@ -186,8 +195,9 @@ function ActivityInviteCard({ payload, preview, loading, ownerName }: {
           </AppText>
           <AppText variant="small">{t('activityCard.by', { name: preview?.ownerName ?? ownerName })}</AppText>
         </View>
-      </Row>
-      {state}
+        <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+      </Pressable>
+      <ActivityJoinState preview={preview} title={payload.title} loading={loading} />
     </View>
   );
 }

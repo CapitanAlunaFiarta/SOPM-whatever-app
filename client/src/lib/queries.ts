@@ -8,8 +8,8 @@ import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
 import type {
-  ActivityChat, ActivityPreview, AdminUser, ChatMessage, CompletionResult, Favor, FavorInput, FavorList, Friend, FriendStatus,
-  LeaderboardEntry, Profile, Recap, Session, Task, TaskInput, TaskMessage, User,
+  ActivityChat, ActivityPreview, AdminUser, CalendarLink, CalendarMonth, ChatMessage, CompletionResult, Favor, FavorInput, FavorList,
+  Friend, FriendStatus, LeaderboardEntry, Profile, Recap, Session, Task, TaskInput, TaskMessage, User,
 } from './types';
 
 export const keys = {
@@ -28,6 +28,8 @@ export const keys = {
   activityChats: ['activity-chats'] as const,
   previews: ['activity-previews'] as const,
   appVersion: ['app-version'] as const,
+  calendar: ['calendar'] as const,
+  calendarLink: ['calendar-link'] as const,
 };
 
 export function useMe() {
@@ -59,6 +61,36 @@ export function useRecap(month: string) {
     queryKey: [...keys.recap, month],
     enabled: status === 'signedIn',
     queryFn: () => request<Recap>('task', `/tasks/recap?month=${encodeURIComponent(month)}`),
+  });
+}
+
+/** Ce am finalizat în fiecare zi a unei luni (YYYY-MM), pentru vederea de calendar. */
+export function useCalendarMonth(month: string) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: [...keys.calendar, month],
+    enabled: status === 'signedIn',
+    queryFn: () => request<CalendarMonth>('task', `/tasks/calendar?month=${encodeURIComponent(month)}`),
+  });
+}
+
+/** Linkul secret de abonare la calendar (se creează la prima cerere). */
+export function useCalendarLink(enabled: boolean) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.calendarLink,
+    enabled: status === 'signedIn' && enabled,
+    staleTime: 5 * 60_000,
+    queryFn: () => request<CalendarLink>('task', '/tasks/calendar/link'),
+  });
+}
+
+/** Un link nou de abonare; cel vechi nu mai funcționează. */
+export function useResetCalendarLink() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<CalendarLink>('task', '/tasks/calendar/link/reset', { method: 'POST' }),
+    onSuccess: (link) => client.setQueryData(keys.calendarLink, link),
   });
 }
 
@@ -157,6 +189,7 @@ function useRefreshAfterTaskChange() {
     client.invalidateQueries({ queryKey: keys.me }),
     client.invalidateQueries({ queryKey: keys.leaderboard }),
     client.invalidateQueries({ queryKey: keys.recap }),
+    client.invalidateQueries({ queryKey: keys.calendar }),
   ]);
 }
 

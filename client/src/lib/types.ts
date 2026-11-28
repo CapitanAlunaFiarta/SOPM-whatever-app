@@ -27,6 +27,9 @@ export type Category = (typeof CATEGORIES)[number];
 export const DEFAULT_CATEGORY: Category = 'CHORES';
 export type Priority = (typeof PRIORITIES)[number];
 export type TaskStatus = 'Upcoming' | 'Overdue' | 'Completed' | 'Canceled';
+/** O activitate recurentă revine la fiecare N zile (DAY) sau N săptămâni (WEEK). */
+export const REPEAT_UNITS = ['DAY', 'WEEK'] as const;
+export type RepeatUnit = (typeof REPEAT_UNITS)[number];
 
 export type Task = {
   id: number;
@@ -35,6 +38,13 @@ export type Task = {
   priority: Priority;
   status: TaskStatus;
   isRecurring: boolean;
+  /** La câte zile/săptămâni revine (1 = zilnic / săptămânal). Serverele vechi nu le trimit. */
+  repeatEvery?: number;
+  repeatUnit?: RepeatUnit;
+  /** Recurentă care revine mai târziu: ziua din care se poate confirma din nou (altfel null). */
+  nextOn?: string | null;
+  /** Textul mai lung de pe ecranul de detalii. */
+  description?: string;
   streakCount: number;
   requiresLocation: boolean;
   latitude: number;
@@ -102,10 +112,13 @@ export const isMember = (task: Task) => task.isOwner || task.myStatus === 'ACCEP
 
 export type TaskInput = {
   title: string;
+  description: string;
   category: Category;
   priority: Priority;
   dueDate: string;
   isRecurring: boolean;
+  repeatEvery: number;
+  repeatUnit: RepeatUnit;
   requiresLocation: boolean;
   latitude: number;
   longitude: number;
@@ -128,6 +141,7 @@ export type ChatKind = 'TEXT' | 'STREAK' | 'ACTIVITY' | 'UPDATE';
 export type StreakPayload = { streak: number; points: number };
 export type ActivityPayload = {
   taskId: number; title: string; category: Category; dueDate: string; isRecurring: boolean; requiresLocation: boolean;
+  repeatEvery?: number; repeatUnit?: RepeatUnit;
 };
 export type UpdatePayload = { version: string; build?: number; url?: string };
 
@@ -179,6 +193,11 @@ export type ActivityPreview = {
   category: Category;
   dueDate: string;
   isRecurring: boolean;
+  repeatEvery?: number;
+  repeatUnit?: RepeatUnit;
+  /** Descrierea face parte din invitație (locația exactă o văd doar membrii). */
+  description?: string;
+  priority?: Priority;
   requiresLocation: boolean;
   status: TaskStatus;
   ownerUsername: string;
@@ -219,6 +238,12 @@ export type Recap = {
   previousTotal: number;
   categories: { category: Category; count: number }[];
 };
+
+/** Ce am finalizat în fiecare zi a unei luni (GET /api/tasks/calendar?month=YYYY-MM). */
+export type CalendarCompletion = { date: string; kind: 'TASK' | 'FAVOR'; id: number; title: string | null; category: Category };
+export type CalendarMonth = { month: string; completions: CalendarCompletion[] };
+/** Tokenul linkului secret de abonare la calendar (fișier .ics citit de Google Calendar). */
+export type CalendarLink = { token: string; lastFetchedAt: string | null };
 
 export type Coordinates = { latitude: number; longitude: number };
 

@@ -14,7 +14,11 @@ function escapeHtml(text: string): string {
 }
 
 /** Harta activităților cu locație în browser (Leaflet). */
-export function TasksMap({ tasks, center }: { tasks: Task[]; center: Coordinates; onSelect?: (task: Task) => void }) {
+export function TasksMap({ tasks, center, minHeight = 360, preview }: {
+  tasks: Task[]; center: Coordinates; onSelect?: (task: Task) => void; minHeight?: number;
+  /** Hartă mică într-o pagină care se derulează: rotița mouse-ului derulează pagina, nu face zoom. */
+  preview?: boolean;
+}) {
   const { t } = useI18n();
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -22,7 +26,8 @@ export function TasksMap({ tasks, center }: { tasks: Task[]; center: Coordinates
 
   useEffect(() => {
     if (!container.current || map.current) return undefined;
-    const instance = L.map(container.current).setView([center.latitude, center.longitude], 13);
+    const instance = L.map(container.current, { scrollWheelZoom: !preview, dragging: !(preview && L.Browser.mobile) })
+      .setView([center.latitude, center.longitude], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(instance);
     layer.current = L.layerGroup().addTo(instance);
     map.current = instance;
@@ -38,19 +43,21 @@ export function TasksMap({ tasks, center }: { tasks: Task[]; center: Coordinates
     const group = layer.current;
     if (!group || !map.current) return;
     group.clearLayers();
-    const bounds: L.LatLngExpression[] = [];
-    tasks.forEach((task) => {
+    let bounds: L.LatLngBounds | null = null;
+    for (const task of tasks) {
       const position: L.LatLngExpression = [task.latitude, task.longitude];
-      bounds.push(position);
+      // Încadrăm tot cercul razei, nu doar pinul.
+      const box = L.latLng(position).toBounds(task.radius * 2);
+      bounds = bounds ? bounds.extend(box) : box;
       L.circle(position, { color: colors.cyan, fillOpacity: 0.15, radius: task.radius }).addTo(group);
       L.marker(position, { icon: pinIcon })
         .bindPopup(`<b>${escapeHtml(task.title)}</b><br/>${escapeHtml(t('map.taskLabel', {
           status: t(`status.${task.status}`), radius: task.radius,
         }))}`)
         .addTo(group);
-    });
-    if (bounds.length > 0) map.current.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 16 });
+    }
+    if (bounds) map.current.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 });
   }, [tasks, t]);
 
-  return <div ref={container} style={{ flex: 1, minHeight: 360, borderRadius: 16, overflow: 'hidden', border: `1px solid ${colors.border}`, zIndex: 0 }} />;
+  return <div ref={container} style={{ flex: 1, minHeight, borderRadius: 16, overflow: 'hidden', border: `1px solid ${colors.border}`, zIndex: 0 }} />;
 }

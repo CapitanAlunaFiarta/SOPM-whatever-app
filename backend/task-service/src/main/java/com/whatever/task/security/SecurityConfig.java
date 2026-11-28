@@ -37,6 +37,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/tasks/health", "/api/tasks/health/db", "/error").permitAll()
+                        // Abonarea la calendar: Google citește fișierul .ics fără token JWT (secretul e în link).
+                        .requestMatchers(HttpMethod.GET, "/api/tasks/calendar/feed/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, ex) ->
