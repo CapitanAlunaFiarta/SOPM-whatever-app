@@ -2,7 +2,8 @@
 
 Task manager gamificat: activități cu scadență, verificare în locație (GPS) și cu biometrie,
 streak zilnic, freeze-uri lunare, prieteni, activități de grup cu chat propriu, favoruri confirmate cu poză,
-recap lunar pe categorii, sesiuni de focus (Android), clasament, chat global și panou de administrare.
+recap lunar pe categorii, sesiuni de focus (Android), clasament, chat global cu reacții și răspunsuri, mesaje private
+între prieteni și panou de administrare.
 Aplicația e în română, engleză și spaniolă.
 
 | Componentă | Tehnologie | Găzduire |
@@ -37,6 +38,13 @@ Aplicația e în română, engleză și spaniolă.
   - Confirmarea se face doar cu camera din aplicație (fără galerie). Serverul verifică momentul pozei, locul (raza) și că e JPEG, iar cel care a cerut aprobă sau respinge poza.
   - La aprobare, cel care a făcut favorul primește streak, un punct și intrare în recap.
 - Emailurile altor utilizatori nu sunt expuse niciodată (prieteni, clasament, activități de grup, chat, favoruri).
+- **Reacții și răspunsuri** (comunitate, chatul activităților, mesaje private): la un mesaj pui o singură reacție dintre
+  👍 ❤️ 😂 😮 😢 🔥 (a doua apăsare pe aceeași o scoate, alta o înlocuiește). Un răspuns arată deasupra începutul mesajului
+  citat (până la 140 de caractere); dacă mesajul citat e șters, răspunsul rămâne, fără citat. Meniul unui mesaj se deschide
+  cu „…” (sau apăsare lungă pe telefon). În chatul unei activități, cât e deschis, îți poți șterge mesajele.
+- **Mesaje private** (`/api/dm`): doar între prieteni (ca favorurile). Deschiderea conversației marchează mesajele primite
+  drept citite, iar sub ultimul tău mesaj scrie „Trimis” sau „Văzut”. Dacă prietenia se încheie, conversația rămâne doar
+  de citit. Conversațiile cu mesaje necitite intră în numărul de pe tab-ul Social.
 - **Detaliile unei activități** (`/activity/<id>`, se deschid apăsând pe card): descrierea (până la 2000 de caractere),
   când revine, harta cu raza și butonul **Deschide în Google Maps** (traseu spre centrul razei), membrii și chatul,
   **Adaugă în Google Calendar** (eveniment de o zi, cu repetarea ca regulă RRULE) și toate butoanele cardului.
@@ -161,12 +169,14 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 `.github/workflows/ci.yml` rulează la fiecare push:
 - **Backend**: `mvn verify` pentru ambele servicii, migrațiile pe un Postgres real și `e2e/api-smoke.mjs` — teste end-to-end
   pentru sesiuni, finalizări, streak, biometrie, locație, prieteni, freeze, admin, resetare parolă, CORS și rate limiting,
-  plus traducerea erorilor, categorii și recap, activități de grup cu chat și favoruri (datorii, refuz „nerezonabil”, poză, aprobare).
+  plus traducerea erorilor, categorii și recap, activități de grup cu chat și favoruri (datorii, refuz „nerezonabil”, poză, aprobare),
+  reacții și răspunsuri în chaturi și mesaje private (doar între prieteni, citit/necitit, doar de citit după despărțire).
 - **Docker**: construiește imaginile ca pe Render și măsoară pornirea cu limitele planului gratuit.
 - **Teste UI** (`e2e/ui/ui-smoke.mjs`): aplicația web, construită pentru backend-ul pornit în CI, rulează într-un Chrome
   headless cu un passkey virtual: cont nou, activități simple / cu passkey / cu locație (inclusiv refuz de departe),
   streak și puncte, cercul de progres, recap-ul lunar, o activitate cu un prieten și chatul ei, un favor confirmat cu poza
-  făcută de camera falsă a lui Chrome (pornită cu întârziere, ca pe un telefon lent), chat, deconectare, rute protejate,
+  făcută de camera falsă a lui Chrome (pornită cu întârziere, ca pe un telefon lent), chat cu reacție și răspuns, un mesaj
+  privat cu „Văzut”, deconectare, rute protejate,
   schimbarea limbii, resetare parolă cu codul din email, panoul de admin.
 - **Aplicația Expo**: TypeScript, ESLint, teste jest (inclusiv compatibilitatea semnăturii Ed25519 a telefonului cu
   verificarea din user-service), build-ul web pentru Netlify și bundle-urile JavaScript pentru Android și iOS.

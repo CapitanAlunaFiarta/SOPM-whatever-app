@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.SqlParameterValue;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
@@ -67,11 +69,17 @@ public class SocialController {
                 .toList();
     }
 
+    /** Ultimele 200 de mesaje (cele mai noi primele), cu citatul răspunsului și reacțiile (ale mele marcate). */
     @GetMapping("/chat")
-    public List<Map<String, Object>> chat() {
-        return db.queryForList("SELECT c.id, c.sender_username, c.sender_name, c.sender_role, c.message_text, c.created_at, c.kind, "
-                        + "c.payload, u.avatar_updated_at FROM chat_messages c LEFT JOIN users u ON u.username = c.sender_username "
-                        + "ORDER BY c.id DESC LIMIT 200").stream()
+    public List<Map<String, Object>> chat(@AuthenticationPrincipal AuthUser auth) {
+        List<Map<String, Object>> rows = db.queryForList("SELECT c.id, c.sender_username, c.sender_name, c.sender_role, c.message_text, "
+                + "c.created_at, c.kind, c.payload, u.avatar_updated_at, r.id AS reply_id, r.sender_username AS reply_username, "
+                + "r.sender_name AS reply_name, r.message_text AS reply_text "
+                + "FROM chat_messages c LEFT JOIN users u ON u.username = c.sender_username "
+                + "LEFT JOIN chat_messages r ON r.id = c.reply_to ORDER BY c.id DESC LIMIT 200");
+        Map<Long, List<Map<String, Object>>> reactions = Reactions.load(db, Reactions.CHAT,
+                rows.stream().map(row -> ((Number) row.get("id")).longValue()).toList(), auth.email());
+        return rows.stream()
                 .map(row -> {
                     String createdAt = UserRepository.isoInstant(row.get("created_at"));
                     Map<String, Object> message = new LinkedHashMap<>();
@@ -85,6 +93,9 @@ public class SocialController {
                     message.put("kind", row.get("kind") == null ? "TEXT" : row.get("kind"));
                     message.put("payload", payload(row.get("payload")));
                     message.put("senderAvatar", UserRepository.avatarVersion(row.get("avatar_updated_at")));
+                    message.put("replyTo", Reactions.reply(row.get("reply_id"), row.get("reply_username"), row.get("reply_name"),
+                            row.get("reply_text")));
+                    message.put("reactions", reactions.getOrDefault(((Number) row.get("id")).longValue(), List.of()));
                     return message;
                 })
                 .toList();
@@ -94,10 +105,27 @@ public class SocialController {
     public Map<String, Object> postChat(@AuthenticationPrincipal AuthUser auth, @Valid @RequestBody ChatRequest request) {
         rateLimiter.check("chat:" + auth.email(), 20, Duration.ofMinutes(1));
         Map<String, Object> user = users.require(auth.email());
-        db.update("INSERT INTO chat_messages(sender_username, sender_name, sender_role, message_text, sent_at) "
-                        + "VALUES (?, ?, ?, ?, ?)",
-                user.get("username"), user.get("full_name"), user.get("role"), request.text().trim(), Instant.now().toString());
+        if (request.replyTo() != null) {
+            Integer found = db.queryForObject("SELECT count(*) FROM chat_messages WHERE id = ?", Integer.class, request.replyTo());
+            if (found == null || found == 0) throw new ApiException(404, "Mesajul la care răspunzi nu mai există.");
+        }
+        db.update("INSERT INTO chat_messages(sender_username, sender_name, sender_role, message_text, sent_at, reply_to) "
+                        + "VALUES (?, ?, ?, ?, ?, ?)",
+                user.get("username"), user.get("full_name"), user.get("role"), request.text().trim(), Instant.now().toString(),
+                new SqlParameterValue(Types.BIGINT, request.replyTo()));
         return Map.of("ok", true);
+    }
+
+    /** Reacția mea la un mesaj din comunitate (aceeași a doua oară o scoate). Întoarce reacțiile mesajului. */
+    @PostMapping("/chat/{id}/reactions")
+    public Map<String, Object> react(@AuthenticationPrincipal AuthUser auth, @PathVariable long id,
+                                     @Valid @RequestBody ReactionRequest request) {
+        rateLimiter.check("react:" + auth.email(), 60, Duration.ofMinutes(1));
+        String emoji = Reactions.emoji(request.emoji());
+        Integer found = db.queryForObject("SELECT count(*) FROM chat_messages WHERE id = ?", Integer.class, id);
+        if (found == null || found == 0) throw new ApiException(404, "Mesajul nu există.");
+        Reactions.toggle(db, Reactions.CHAT, id, auth.email(), emoji);
+        return Map.of("id", id, "reactions", Reactions.load(db, Reactions.CHAT, List.of(id), auth.email()).getOrDefault(id, List.of()));
     }
 
     /** Își arată streak-ul în comunitate. Valoarea o pune serverul, deci nu poate fi umflată. */
@@ -150,6 +178,10 @@ public class SocialController {
         }
     }
 
-    public record ChatRequest(@NotBlank(message = "Mesajul este gol.") @Size(max = 2000, message = "Mesajul e prea lung.") String text) {
+    public record ChatRequest(@NotBlank(message = "Mesajul este gol.") @Size(max = 2000, message = "Mesajul e prea lung.") String text,
+                              /** Mesajul la care răspunzi (opțional). */ Long replyTo) {
+    }
+
+    public record ReactionRequest(@NotBlank(message = "Alege o reacție.") @Size(max = 16, message = "Reacție necunoscută.") String emoji) {
     }
 }

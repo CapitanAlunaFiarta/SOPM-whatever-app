@@ -145,7 +145,20 @@ public class TaskController {
     @PostMapping("/{id}/messages")
     public Map<String, Object> sendMessage(@AuthenticationPrincipal AuthUser user, @PathVariable long id,
                                            @Valid @RequestBody MessageRequest request) {
-        return tasks.sendMessage(user, id, request.text());
+        return tasks.sendMessage(user, id, request.text(), request.replyTo());
+    }
+
+    /** Reacția mea la un mesaj din chatul activității. */
+    @PostMapping("/{id}/messages/{messageId}/reactions")
+    public Map<String, Object> react(@AuthenticationPrincipal AuthUser user, @PathVariable long id, @PathVariable long messageId,
+                                     @Valid @RequestBody ReactionRequest request) {
+        return tasks.react(user, id, messageId, request.emoji());
+    }
+
+    @DeleteMapping("/{id}/messages/{messageId}")
+    public Map<String, Object> deleteMessage(@AuthenticationPrincipal AuthUser user, @PathVariable long id, @PathVariable long messageId) {
+        tasks.deleteMessage(user, id, messageId);
+        return Map.of("ok", true);
     }
 
     @DeleteMapping("/{id}")
@@ -179,7 +192,11 @@ public class TaskController {
 
     public record MessageRequest(
             @NotBlank(message = "Mesajul nu poate fi gol.")
-            @Size(max = 2000, message = "Mesajul poate avea cel mult 2000 de caractere.") String text) {
+            @Size(max = 2000, message = "Mesajul poate avea cel mult 2000 de caractere.") String text,
+            /** Mesajul la care răspunzi (opțional). */ Long replyTo) {
+    }
+
+    public record ReactionRequest(@NotBlank(message = "Alege o reacție.") @Size(max = 16, message = "Reacție necunoscută.") String emoji) {
     }
 
     /** Câmpul vechi "mobileBiometricConfirmed" este ignorat: biometria se dovedește doar prin biometricToken. */

@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ComponentProps, ReactNode, Ref } from 'react';
 import {
   ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View,
-  type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
+  type StyleProp, type TextInputInstance, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -122,11 +122,16 @@ export function IconButton({ icon, onPress, label, tone = 'neutral' }: {
   );
 }
 
-export function TextField({ label, error, style, ...props }: TextInputProps & { label?: string; error?: string }) {
+export function TextField({ label, error, style, inputRef, ...props }: TextInputProps & {
+  label?: string; error?: string;
+  /** Pentru focus din cod (ex. după „Răspunde” la un mesaj). */
+  inputRef?: Ref<TextInputInstance>;
+}) {
   return (
     <View style={styles.field}>
       {label ? <Text style={textStyles.label}>{label}</Text> : null}
       <TextInput
+        ref={inputRef}
         placeholderTextColor={colors.faint}
         style={[styles.input, props.multiline && styles.inputMultiline, error ? { borderColor: colors.red } : null, style]}
         accessibilityLabel={label ?? props.placeholder}

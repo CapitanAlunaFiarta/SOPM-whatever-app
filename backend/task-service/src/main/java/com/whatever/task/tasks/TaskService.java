@@ -266,18 +266,24 @@ public class TaskService {
         return result;
     }
 
-    /** Mesajele din chatul activității (ultimele 200), pentru membri. */
+    private static final String MESSAGE_SELECT = "SELECT m.id, m.body, m.created_at, m.sender_email, u.username, u.full_name, "
+            + "u.avatar_updated_at, r.id AS reply_id, ru.username AS reply_username, ru.full_name AS reply_name, r.body AS reply_text "
+            + "FROM task_messages m JOIN users u ON u.email = m.sender_email "
+            + "LEFT JOIN task_messages r ON r.id = m.reply_to LEFT JOIN users ru ON ru.email = r.sender_email ";
+
+    /** Mesajele din chatul activității (ultimele 200, cele mai vechi primele), cu citatul răspunsului și reacțiile. */
     public List<Map<String, Object>> messages(AuthUser user, long id) {
         requireMember(findRow(id), user);
-        List<Map<String, Object>> rows = new ArrayList<>(db.queryForList("SELECT m.id, m.body, m.created_at, m.sender_email, "
-                + "u.username, u.full_name, u.avatar_updated_at FROM task_messages m JOIN users u ON u.email = m.sender_email "
+        List<Map<String, Object>> rows = new ArrayList<>(db.queryForList(MESSAGE_SELECT
                 + "WHERE m.task_id = ? ORDER BY m.id DESC LIMIT 200", id));
         Collections.reverse(rows);
-        return rows.stream().map(row -> message(row, user)).toList();
+        Map<Long, List<Map<String, Object>>> reactions = Reactions.load(db, Reactions.TASK,
+                rows.stream().map(row -> longValue(row.get("id"))).toList(), user.email());
+        return rows.stream().map(row -> message(row, user, reactions)).toList();
     }
 
     @Transactional
-    public Map<String, Object> sendMessage(AuthUser user, long id, String text) {
+    public Map<String, Object> sendMessage(AuthUser user, long id, String text, Long replyTo) {
         Map<String, Object> task = findRow(id);
         requireMember(task, user);
         Integer accepted = db.queryForObject("SELECT count(*) FROM task_participants WHERE task_id = ? AND status = 'ACCEPTED'",
@@ -285,16 +291,54 @@ public class TaskService {
         if (accepted == null || accepted == 0) {
             throw new ApiException(409, "Chatul se deschide după ce un prieten acceptă invitația.");
         }
+        requireOpenChat(task);
+        String body = text == null ? "" : text.trim();
+        if (body.isEmpty()) throw new ApiException(400, "Mesajul nu poate fi gol.");
+        if (replyTo != null) {
+            Integer found = db.queryForObject("SELECT count(*) FROM task_messages WHERE id = ? AND task_id = ?", Integer.class, replyTo, id);
+            if (found == null || found == 0) throw new ApiException(404, "Mesajul la care răspunzi nu mai există.");
+        }
+        Long messageId = db.queryForObject("INSERT INTO task_messages(task_id, sender_email, body, reply_to) VALUES (?, ?, ?, ?) RETURNING id",
+                Long.class, id, user.email(), body, new SqlParameterValue(Types.BIGINT, replyTo));
+        return message(db.queryForMap(MESSAGE_SELECT + "WHERE m.id = ?", messageId), user, Map.of());
+    }
+
+    /**
+     * Reacția mea la un mesaj din chatul activității (aceeași a doua oară o scoate), cât timp chatul e deschis.
+     * Întoarce reacțiile mesajului.
+     */
+    @Transactional
+    public Map<String, Object> react(AuthUser user, long id, long messageId, String emoji) {
+        String value = Reactions.emoji(emoji);
+        Map<String, Object> task = findRow(id);
+        requireMember(task, user);
+        requireOpenChat(task);
+        Integer found = db.queryForObject("SELECT count(*) FROM task_messages WHERE id = ? AND task_id = ?", Integer.class, messageId, id);
+        if (found == null || found == 0) throw new ApiException(404, "Mesajul nu există.");
+        Reactions.toggle(db, Reactions.TASK, messageId, user.email(), value);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", messageId);
+        response.put("reactions", Reactions.load(db, Reactions.TASK, List.of(messageId), user.email()).getOrDefault(messageId, List.of()));
+        return response;
+    }
+
+    /** Îmi șterg un mesaj din chatul activității (cât timp chatul e deschis). */
+    @Transactional
+    public void deleteMessage(AuthUser user, long id, long messageId) {
+        Map<String, Object> task = findRow(id);
+        requireMember(task, user);
+        List<String> sender = db.queryForList("SELECT sender_email FROM task_messages WHERE id = ? AND task_id = ?", String.class, messageId, id);
+        if (sender.isEmpty()) throw new ApiException(404, "Mesajul nu există.");
+        if (!user.email().equals(sender.get(0))) throw new ApiException(403, "Poți șterge doar mesajele tale.");
+        requireOpenChat(task);
+        db.update("DELETE FROM task_messages WHERE id = ?", messageId);
+    }
+
+    private static void requireOpenChat(Map<String, Object> task) {
         Instant closesAt = TaskRules.chatClosesAt(instant(task.get("finished_at")));
         if (closesAt != null && Instant.now().isAfter(closesAt)) {
             throw new ApiException(409, "Chatul acestei activități s-a închis.");
         }
-        String body = text == null ? "" : text.trim();
-        if (body.isEmpty()) throw new ApiException(400, "Mesajul nu poate fi gol.");
-        Long messageId = db.queryForObject("INSERT INTO task_messages(task_id, sender_email, body) VALUES (?, ?, ?) RETURNING id",
-                Long.class, id, user.email(), body);
-        return message(db.queryForMap("SELECT m.id, m.body, m.created_at, m.sender_email, u.username, u.full_name, "
-                + "u.avatar_updated_at FROM task_messages m JOIN users u ON u.email = m.sender_email WHERE m.id = ?", messageId), user);
     }
 
     /**
@@ -817,7 +861,7 @@ public class TaskService {
         return task;
     }
 
-    private static Map<String, Object> message(Map<String, Object> row, AuthUser user) {
+    private static Map<String, Object> message(Map<String, Object> row, AuthUser user, Map<Long, List<Map<String, Object>>> reactions) {
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("id", row.get("id"));
         message.put("text", row.get("body"));
@@ -826,6 +870,8 @@ public class TaskService {
         message.put("fullName", row.get("full_name"));
         message.put("mine", user.email().equals(row.get("sender_email")));
         message.put("avatarVersion", avatarVersion(row.get("avatar_updated_at")));
+        message.put("replyTo", Reactions.reply(row.get("reply_id"), row.get("reply_username"), row.get("reply_name"), row.get("reply_text")));
+        message.put("reactions", reactions.getOrDefault(longValue(row.get("id")), List.of()));
         return message;
     }
 
