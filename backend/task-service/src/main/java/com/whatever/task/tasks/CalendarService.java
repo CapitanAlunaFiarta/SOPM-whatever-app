@@ -114,7 +114,8 @@ public class CalendarService {
         if (owner.isEmpty()) throw new ApiException(404, "Calendarul nu există.");
         String email = owner.get(0);
         db.update("UPDATE calendar_feeds SET last_fetched_at = now() WHERE token = ?", token);
-        String lang = I18n.SUPPORTED.contains(language) ? language : "ro";
+        // List.of(...).contains(null) aruncă NullPointerException, deci verificăm întâi că limba există.
+        String lang = language != null && I18n.SUPPORTED.contains(language) ? language : "ro";
 
         List<CalendarFeed.Event> events = db.queryForList("SELECT t.* FROM tasks t WHERE (t.owner_email = ? OR EXISTS ("
                         + "SELECT 1 FROM task_participants p WHERE p.task_id = t.id AND p.user_email = ? AND p.status = 'ACCEPTED')) "

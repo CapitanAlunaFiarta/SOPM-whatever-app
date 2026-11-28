@@ -200,10 +200,14 @@ async function main() {
   const ics = feed.text.replace(/\r\n /g, '');
   check('abonare: fișier .ics fără autentificare', feed.status === 200 && (feed.headers.get('content-type') || '').startsWith('text/calendar')
     && ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.includes('X-WR-CALNAME:Whatever — my activities\r\n'), feed.text.slice(0, 300));
-  check('abonare: activitatea recurentă are regula, ziua următoare și locația', ics.includes('SUMMARY:Fotbal\\, la două săptămâni\r\n')
-    && ics.includes('RRULE:FREQ=WEEKLY;INTERVAL=2\r\n') && ics.includes(`DTSTART;VALUE=DATE:${plusDays(today, 14).replace(/-/g, '')}\r\n`)
-    && ics.includes('GEO:45.652500;25.588800\r\n') && ics.includes('DESCRIPTION:Adu mingea\; ne vedem la poartă.\\n\\nOpen in Whatever: ')
-    && feed.text.split('\r\n').every((line) => Buffer.byteLength(line, 'utf8') <= 75), ics.slice(0, 1200));
+  const footballEvent = ics.split('BEGIN:VEVENT').find((event) => event.includes(`UID:whatever-task-${football.json?.id}@`)) ?? '';
+  check('abonare: activitatea recurentă are regula și ziua următoare', footballEvent.includes('SUMMARY:Fotbal\\, la două săptămâni\r\n')
+    && footballEvent.includes('RRULE:FREQ=WEEKLY;INTERVAL=2\r\n')
+    && footballEvent.includes(`DTSTART;VALUE=DATE:${plusDays(today, 14).replace(/-/g, '')}\r\n`), footballEvent || ics);
+  check('abonare: locația și descrierea (scăpate ca în RFC 5545)', footballEvent.includes('GEO:45.652500;25.588800\r\n')
+    && footballEvent.includes('DESCRIPTION:Adu mingea\\; ne vedem la poartă.\\n\\nOpen in Whatever: '), footballEvent || ics);
+  const longLines = feed.text.split('\r\n').filter((line) => Buffer.byteLength(line, 'utf8') > 75);
+  check('abonare: rânduri de cel mult 75 de octeți', longLines.length === 0, longLines);
   const fetchedAt = await call('GET', `${TASK}/tasks/calendar/link`, { token: tokenA });
   const feedReset = await call('POST', `${TASK}/tasks/calendar/link/reset`, { token: tokenA });
   const oldFeed = await call('GET', `${TASK}/tasks/calendar/feed/${feedLink.json?.token}.ics`);
