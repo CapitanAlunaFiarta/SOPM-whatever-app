@@ -84,8 +84,10 @@ function UpdateBody({ version, build, url }: { version: string; build: number; u
           {build > 0 ? <AppText variant="small">{t('update.chatBuild', { build })}</AppText> : null}
         </View>
       </Row>
-      {newest.version !== version ? <AppText variant="small">{t('update.newestIs', { version: newest.version })}</AppText> : null}
-      {!newer ? <AppText variant="small">{t('update.chatHave')}</AppText>
+      {/* Un anunț mai vechi trimite doar la cel nou, ca în chat să fie un singur buton de actualizare. */}
+      {newest.version !== version || newest.build !== build
+        ? <AppText variant="small">{t('update.newestIs', { version: newest.version })}</AppText>
+        : !newer ? <AppText variant="small">{t('update.chatHave')}</AppText>
         : updateKind === 'none' ? <AppText variant="small">{t('update.iosHint')}</AppText> : (
           <Button compact variant="danger" icon={updateKind === 'download' ? 'download-outline' : 'refresh'} title={t('update.update')}
             onPress={() => { startUpdate(newest.url).catch((error) => showMessage(t('card.actionFailed'), errorMessage(error))); }} />
