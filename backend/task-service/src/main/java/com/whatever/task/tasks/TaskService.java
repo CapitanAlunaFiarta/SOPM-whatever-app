@@ -78,14 +78,18 @@ public class TaskService {
     @Transactional
     public Map<String, Object> create(AuthUser user, TaskController.TaskRequest request) {
         validateLocation(request);
+        String unit = TaskRules.repeatUnit(request.repeatUnit());
+        int every = TaskRules.repeatEvery(request.repeatEvery(), unit);
         List<String> invited = inviteeEmails(user, TaskRules.invitedUsernames(request.participants(), request.friend()), null);
         Long id = db.queryForObject("INSERT INTO tasks(title, category, priority, status, is_recurring, requires_location, "
-                        + "latitude, longitude, allowed_radius_meters, requires_biometrics, due_date, owner_email, shared_with_friend) "
-                        + "VALUES (?, ?, ?, 'Upcoming', ?, ?, ?, ?, ?, ?, ?, ?, '') RETURNING id",
+                        + "latitude, longitude, allowed_radius_meters, requires_biometrics, due_date, owner_email, shared_with_friend, "
+                        + "description, repeat_every, repeat_unit) "
+                        + "VALUES (?, ?, ?, 'Upcoming', ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?) RETURNING id",
                 Long.class,
                 request.title().trim(), TaskRules.category(request.category()), TaskRules.priority(request.priority()),
                 request.isRecurring(), request.requiresLocation(), request.latitude(), request.longitude(), request.radius(),
-                request.requiresBiometrics(), Date.valueOf(request.dueDate()), user.email());
+                request.requiresBiometrics(), Date.valueOf(request.dueDate()), user.email(),
+                TaskRules.description(request.description()), every, unit);
         for (String email : invited) {
             db.update("INSERT INTO task_participants(task_id, user_email) VALUES (?, ?)", id, email);
         }
@@ -99,13 +103,20 @@ public class TaskService {
             throw new ApiException(409, "Doar activitățile active pot fi editate.");
         }
         validateLocation(request);
+        // Clienții vechi nu știu de descriere și de interval: atunci rămân cele salvate.
+        String unit = request.repeatUnit() == null ? String.valueOf(task.get("repeat_unit")) : TaskRules.repeatUnit(request.repeatUnit());
+        int every = TaskRules.repeatEvery(request.repeatEvery() == null ? intValue(task.get("repeat_every")) : request.repeatEvery(), unit);
+        String description = request.description() == null
+                ? String.valueOf(task.get("description") == null ? "" : task.get("description"))
+                : TaskRules.description(request.description());
         List<String> invited = inviteeEmails(user, TaskRules.invitedUsernames(request.participants(), request.friend()), id);
         db.update("UPDATE tasks SET title = ?, category = ?, priority = ?, is_recurring = ?, due_date = ?, "
                         + "requires_location = ?, latitude = ?, longitude = ?, allowed_radius_meters = ?, requires_biometrics = ?, "
-                        + "updated_at = now() WHERE id = ?",
+                        + "description = ?, repeat_every = ?, repeat_unit = ?, updated_at = now() WHERE id = ?",
                 request.title().trim(), TaskRules.category(request.category()), TaskRules.priority(request.priority()),
                 request.isRecurring(), Date.valueOf(request.dueDate()), request.requiresLocation(),
-                request.latitude(), request.longitude(), request.radius(), request.requiresBiometrics(), id);
+                request.latitude(), request.longitude(), request.radius(), request.requiresBiometrics(),
+                description, every, unit, id);
         // Clienții vechi trimit doar „friend” (un singur prieten): atunci doar adăugăm, nu scoatem pe nimeni.
         syncParticipants(id, invited, request.participants() != null);
         settle(id);
@@ -187,6 +198,11 @@ public class TaskService {
                 Integer.class, id, user.email());
         if (done != null && done > 0) {
             throw new ApiException(409, recurring ? "Ai finalizat deja activitatea azi." : "Ai confirmat deja această activitate.");
+        }
+        // O activitate recurentă se confirmă din ziua în care revine (ex. una săptămânală, o dată pe săptămână).
+        LocalDate due = localDate(task.get("due_date"));
+        if (recurring && due != null && due.isAfter(today)) {
+            throw new ApiException(409, "Activitatea poate fi confirmată din " + due + ".");
         }
 
         boolean locationVerified = false;
@@ -354,6 +370,8 @@ public class TaskService {
         details.put("category", TaskRules.storedCategory(task.get("category")));
         details.put("dueDate", due.toString());
         details.put("isRecurring", Boolean.TRUE.equals(task.get("is_recurring")));
+        details.put("repeatEvery", Math.max(1, intValue(task.get("repeat_every"))));
+        details.put("repeatUnit", task.get("repeat_unit") == null ? "DAY" : task.get("repeat_unit"));
         details.put("requiresLocation", Boolean.TRUE.equals(task.get("requires_location")));
         // Textul e pentru aplicațiile vechi; cele noi afișează un card tradus din payload.
         String text = "📣 Vă invit la „" + task.get("title") + "” (" + due + "). Cereți să participați din Whatever.";
@@ -412,6 +430,11 @@ public class TaskService {
             preview.put("category", TaskRules.storedCategory(row.get("category")));
             preview.put("dueDate", due == null ? null : due.toString());
             preview.put("isRecurring", Boolean.TRUE.equals(row.get("is_recurring")));
+            preview.put("repeatEvery", Math.max(1, intValue(row.get("repeat_every"))));
+            preview.put("repeatUnit", row.get("repeat_unit") == null ? "DAY" : row.get("repeat_unit"));
+            // Descrierea face parte din invitație; locația exactă o văd doar membrii.
+            preview.put("description", row.get("description") == null ? "" : row.get("description"));
+            preview.put("priority", row.get("priority"));
             preview.put("requiresLocation", Boolean.TRUE.equals(row.get("requires_location")));
             preview.put("status", status);
             preview.put("ownerUsername", row.get("owner_username"));
@@ -552,7 +575,7 @@ public class TaskService {
      * Rândul activității trebuie să fie deja blocat în tranzacția curentă.
      */
     private void settle(long id) {
-        Map<String, Object> task = db.queryForMap("SELECT status, is_recurring, due_date FROM tasks WHERE id = ?", id);
+        Map<String, Object> task = db.queryForMap("SELECT status, is_recurring, due_date, repeat_every, repeat_unit FROM tasks WHERE id = ?", id);
         if (!"Upcoming".equals(task.get("status"))) return;
         Integer pending = db.queryForObject("SELECT count(*) FROM task_participants WHERE task_id = ? AND status = 'INVITED'",
                 Integer.class, id);
@@ -569,10 +592,12 @@ public class TaskService {
                     + "updated_at = now() WHERE id = ?", id);
             return;
         }
+        // Revine la N zile/săptămâni după ziua în care au confirmat toți (zilnic = mâine).
         LocalDate due = localDate(task.get("due_date"));
         if (due == null || !due.isAfter(today)) {
+            LocalDate next = TaskRules.nextDue(today, intValue(task.get("repeat_every")), String.valueOf(task.get("repeat_unit")));
             db.update("UPDATE tasks SET streak_count = streak_count + 1, due_date = ?, updated_at = now() WHERE id = ?",
-                    Date.valueOf(today.plusDays(1)), id);
+                    Date.valueOf(next), id);
         }
     }
 
@@ -758,6 +783,11 @@ public class TaskService {
         task.put("priority", row.get("priority"));
         task.put("status", status);
         task.put("isRecurring", recurring);
+        task.put("repeatEvery", Math.max(1, intValue(row.get("repeat_every"))));
+        task.put("repeatUnit", row.get("repeat_unit") == null ? "DAY" : row.get("repeat_unit"));
+        // O activitate recurentă care revine mai târziu (ex. săptămâna viitoare) nu se poate confirma până atunci.
+        task.put("nextOn", recurring && due != null && due.isAfter(today) ? due.toString() : null);
+        task.put("description", row.get("description") == null ? "" : row.get("description"));
         task.put("streakCount", intValue(row.get("streak_count")));
         task.put("requiresLocation", Boolean.TRUE.equals(row.get("requires_location")));
         task.put("latitude", doubleValue(row.get("latitude")));

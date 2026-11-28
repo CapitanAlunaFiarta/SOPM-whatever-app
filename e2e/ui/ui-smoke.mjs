@@ -306,6 +306,77 @@ if (ok) {
     await waitPath('/');
   });
 
+  // Linkurile externe (Google Maps, Google Calendar) se deschid într-o fereastră nouă: le prindem fără să plecăm din pagină.
+  const catchOpenedLinks = () => page.evaluate(() => {
+    window.__opened = [];
+    window.open = (url) => { window.__opened.push(String(url)); return null; };
+  });
+  const openedLinks = () => page.evaluate(() => window.__opened ?? []);
+
+  await step('detalii: descriere, Google Maps spre centrul razei, Google Calendar, repetare la 2 săptămâni', async () => {
+    await page.goto(`${BASE}/task/new`);
+    await field('Ce vrei să faci?').fill('Fotbal în parc');
+    await field('Descriere (opțional)').fill('Adu mingea. Ne vedem la intrarea dinspre lac.');
+    await visible(page.getByRole('switch', { name: 'Se repetă' })).click();
+    await field('Numărul de zile sau săptămâni').fill('2');
+    await visible(page.getByRole('tab', { name: 'săptămâni', exact: true })).click();
+    await seen('Revine la 2 săptămâni după ce o confirmi.');
+    await visible(page.getByRole('switch', { name: 'Confirmare în locație' })).click();
+    await seen(`${BRASOV.latitude.toFixed(5)}, ${BRASOV.longitude.toFixed(5)}`);
+    await button('Adaugă activitatea').click();
+    await page.waitForURL((url) => url.pathname !== '/task/new');
+    await taskCard('Fotbal în parc').getByText('La fiecare 2 săptămâni · 0×').waitFor();
+    await visible(page.getByRole('link', { name: 'Detalii: Fotbal în parc', exact: true })).first().click();
+    await page.waitForURL((url) => url.pathname.startsWith('/activity/'));
+    await seen('Adu mingea. Ne vedem la intrarea dinspre lac.');
+    await seen('Repetare: La fiecare 2 săptămâni · încă neconfirmată');
+    await seen('Raza: 150 m');
+    await catchOpenedLinks();
+    await button('Deschide în Google Maps').click();
+    await button('Adaugă în Google Calendar').click();
+    const opened = await openedLinks();
+    const maps = opened.find((url) => url.startsWith('https://www.google.com/maps/dir/'));
+    if (!maps?.includes(`destination=${BRASOV.latitude.toFixed(6)},${BRASOV.longitude.toFixed(6)}`)) {
+      throw new Error(`Google Maps nu duce în centrul razei: ${opened.join(' | ')}`);
+    }
+    const calendar = new URL(opened.find((url) => url.startsWith('https://calendar.google.com/calendar/render')) ?? 'about:blank');
+    if (calendar.searchParams.get('recur') !== 'RRULE:FREQ=WEEKLY;INTERVAL=2' || calendar.searchParams.get('text') !== 'Fotbal în parc'
+      || !calendar.searchParams.get('details')?.startsWith('Adu mingea.')) {
+      throw new Error(`Google Calendar: ${calendar}`);
+    }
+    // Butoanele de pe card sunt și aici: confirmarea mută activitatea peste 2 săptămâni.
+    const before = dialogs.length;
+    await button('Confirmă').click();
+    await expectDialog(before, /Streak: 1 zi/);
+    await seen(/^Revine pe \d{1,2} \S+/);
+    await button('Închide').click();
+  });
+
+  await step('calendar: finalizarea de azi, ziua aleasă și abonarea din Google Calendar', async () => {
+    await openTab('Activități', '/tasks');
+    // Butoanele cu iconiță au în nume și caracterul iconiței, deci căutăm după o parte din nume.
+    await visible(page.getByRole('tab', { name: 'Calendar' })).click();
+    await visible(page.getByRole('button', { name: /^Azi · programate: \d+ · finalizate: [1-9]/ })).first().click();
+    await seen(/activități finalizate$/);
+    await visible(page.getByRole('link', { name: 'Detalii: Fotbal în parc', exact: true })).first().waitFor();
+    const subscribe = button('Abonează-te în Google Calendar');
+    await eventually(async () => {
+      if ((await subscribe.getAttribute('aria-disabled')) === 'true') throw new Error('Linkul de abonare nu e gata');
+    });
+    await catchOpenedLinks();
+    await subscribe.click();
+    const opened = await openedLinks();
+    const cid = new URL(opened[0] ?? 'about:blank').searchParams.get('cid') ?? '';
+    if (!/^webcal:\/\/.+\/tasks\/calendar\/feed\/[A-Za-z0-9_-]{32}\.ics\?lang=ro$/.test(cid)) throw new Error(`Abonare: ${opened.join(' | ')}`);
+    // Fișierul pe care îl citește Google: fără autentificare, cu activitatea și repetarea ei.
+    const response = await fetch(cid.replace(/^webcal:/, new URL(TASK_API).protocol));
+    const ics = (await response.text()).replace(/\r\n /g, '');
+    if (response.status !== 200 || !ics.includes('SUMMARY:Fotbal în parc') || !ics.includes('RRULE:FREQ=WEEKLY;INTERVAL=2')) {
+      throw new Error(`Fișierul .ics: ${response.status} ${ics.slice(0, 400)}`);
+    }
+    await visible(page.getByRole('tab', { name: 'Listă' })).click();
+  });
+
   await step('activitate cu un prieten: invitație, acceptare și chatul activității', async () => {
     const friend = {
       fullName: 'Bob Prieten', username: `bob_${run}`, email: `bob_${run}@ci.local`, password: 'parola-bob-foarte-sigura-1',

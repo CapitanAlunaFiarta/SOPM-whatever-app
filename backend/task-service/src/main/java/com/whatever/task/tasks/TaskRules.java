@@ -32,6 +32,10 @@ public final class TaskRules {
     public static final int MAX_PARTICIPANTS = MAX_MEMBERS - 1;
     /** Chatul unei activități de grup rămâne deschis încă 5 zile după ce activitatea s-a încheiat. */
     public static final Duration CHAT_OPEN_AFTER_FINISH = Duration.ofDays(5);
+    /** Unitățile de repetare: la fiecare N zile sau N săptămâni. */
+    public static final List<String> REPEAT_UNITS = List.of("DAY", "WEEK");
+    public static final int MAX_REPEAT_DAYS = 365;
+    public static final int MAX_REPEAT_WEEKS = 52;
 
     private TaskRules() {
     }
@@ -127,5 +131,34 @@ public final class TaskRules {
     /** Momentul de la care chatul activității devine doar de citit (null cât timp activitatea continuă). */
     public static Instant chatClosesAt(Instant finishedAt) {
         return finishedAt == null ? null : finishedAt.plus(CHAT_OPEN_AFTER_FINISH);
+    }
+
+    /** Unitatea de repetare trimisă de client: DAY (implicit, și pentru clienții vechi) sau WEEK. Altceva → 400. */
+    public static String repeatUnit(String value) {
+        String unit = value == null ? "" : value.trim();
+        if (unit.isEmpty()) return "DAY";
+        return REPEAT_UNITS.stream().filter(item -> item.equalsIgnoreCase(unit)).findFirst()
+                .orElseThrow(() -> new ApiException(400, "Repetare invalidă. Alege zile sau săptămâni."));
+    }
+
+    /** La câte zile/săptămâni se repetă: implicit 1, cel mult 365 de zile sau 52 de săptămâni. */
+    public static int repeatEvery(Integer value, String unit) {
+        int every = value == null ? 1 : value;
+        int max = "WEEK".equals(unit) ? MAX_REPEAT_WEEKS : MAX_REPEAT_DAYS;
+        if (every < 1 || every > max) {
+            throw new ApiException(400, "Repetarea poate fi la cel mult 365 de zile sau 52 de săptămâni.");
+        }
+        return every;
+    }
+
+    /** Data la care revine o activitate recurentă finalizată azi: peste N zile sau N săptămâni. */
+    public static LocalDate nextDue(LocalDate today, int every, String unit) {
+        int step = Math.max(1, every);
+        return "WEEK".equals(unit) ? today.plusWeeks(step) : today.plusDays(step);
+    }
+
+    /** Descrierea fără spații la capete; lipsă → text gol. */
+    public static String description(String value) {
+        return value == null ? "" : value.strip();
     }
 }

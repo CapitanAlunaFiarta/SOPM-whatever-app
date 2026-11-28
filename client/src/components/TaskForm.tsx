@@ -7,13 +7,14 @@ import { errorMessage } from '@/lib/api';
 import { localDate } from '@/lib/dates';
 import { currentPosition } from '@/lib/location';
 import { isFriend, useFriends, useSaveTask } from '@/lib/queries';
-import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_COORDS, PRIORITIES, type Task, type TaskInput } from '@/lib/types';
+import { isValidRepeat, MAX_REPEAT } from '@/lib/recurrence';
+import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_COORDS, PRIORITIES, type RepeatUnit, type Task, type TaskInput } from '@/lib/types';
 
 import { DateField } from './DateField';
 import { LocationPicker } from './LocationPicker';
 import { isValidRadius, RADIUS_MIN, RadiusPicker } from './RadiusPicker';
 import { colors } from './theme';
-import { AppText, Banner, Button, Card, ChipGroup, MultiChipGroup, Row, TextField, ToggleRow } from './ui';
+import { AppText, Banner, Button, Card, ChipGroup, MultiChipGroup, Row, Segmented, TextField, ToggleRow } from './ui';
 
 const RADIUS_OPTIONS = [50, 100, 150, 300, 500, 1000] as const;
 
@@ -22,21 +23,25 @@ function initialInput(task?: Task): TaskInput {
     const { title, category, priority, dueDate, isRecurring, requiresLocation, latitude, longitude, radius, requiresBiometrics } = task;
     return {
       title, category, priority, dueDate, isRecurring, requiresLocation, requiresBiometrics,
+      description: task.description ?? '', repeatEvery: task.repeatEvery ?? 1, repeatUnit: task.repeatUnit ?? 'DAY',
       // Cei care au refuzat nu sunt bifați; dacă îi bifezi din nou, primesc o invitație nouă.
       participants: (task.participants ?? []).filter((person) => person.status !== 'DECLINED').map((person) => person.username),
       latitude: latitude || DEFAULT_COORDS.latitude, longitude: longitude || DEFAULT_COORDS.longitude, radius: radius || 150,
     };
   }
   return {
-    title: '', category: DEFAULT_CATEGORY, priority: 'Medium', dueDate: localDate(), isRecurring: false,
+    title: '', description: '', category: DEFAULT_CATEGORY, priority: 'Medium', dueDate: localDate(), isRecurring: false,
+    repeatEvery: 1, repeatUnit: 'DAY',
     requiresLocation: false, ...DEFAULT_COORDS, radius: 150, requiresBiometrics: false, participants: [],
   };
 }
 
 /** Formular comun pentru crearea și editarea unei activități (telefon și web). */
 export function TaskForm({ task }: { task?: Task }) {
-  const { t } = useI18n();
+  const { t, tp } = useI18n();
   const [input, setInput] = useState<TaskInput>(() => initialInput(task));
+  // Textul din câmpul „la fiecare N”, ca să poată fi gol cât timp scrii.
+  const [everyText, setEveryText] = useState(() => String(task?.repeatEvery ?? 1));
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const save = useSaveTask();
@@ -65,10 +70,21 @@ export function TaskForm({ task }: { task?: Task }) {
       setError(t('form.radiusInvalid'));
       return;
     }
+    if (input.isRecurring && !isValidRepeat(input.repeatEvery, input.repeatUnit)) {
+      setError(t('form.repeatInvalid', { days: MAX_REPEAT.DAY, weeks: MAX_REPEAT.WEEK }));
+      return;
+    }
     // Fără locație raza nu contează, dar serverul o vrea validă.
     const radius = isValidRadius(input.radius) ? input.radius : 150;
     try {
-      await save.mutateAsync({ id: task?.id, input: { ...input, radius, title: input.title.trim() } });
+      await save.mutateAsync({
+        id: task?.id,
+        input: {
+          ...input, radius, title: input.title.trim(), description: input.description.trim(),
+          // O activitate care nu se repetă păstrează valorile implicite.
+          ...(input.isRecurring ? {} : { repeatEvery: 1, repeatUnit: 'DAY' as RepeatUnit }),
+        },
+      });
       if (router.canGoBack()) router.back();
       else router.replace('/tasks');
     } catch (e) {
@@ -88,6 +104,8 @@ export function TaskForm({ task }: { task?: Task }) {
       <Card>
         <TextField label={t('form.title')} value={input.title} onChangeText={(value) => set('title', value)}
           placeholder={t('form.titlePlaceholder')} maxLength={255} autoFocus={!task} />
+        <TextField label={t('form.description')} value={input.description} onChangeText={(value) => set('description', value)}
+          placeholder={t('form.descriptionPlaceholder')} maxLength={2000} multiline />
         <Text style={styles.label}>{t('form.category')}</Text>
         <ChipGroup options={CATEGORIES} value={input.category} onChange={(value) => set('category', value)}
           labels={Object.fromEntries(CATEGORIES.map((key) => [key, t(`category.${key}`)]))} />
@@ -98,8 +116,31 @@ export function TaskForm({ task }: { task?: Task }) {
       </Card>
 
       <Card>
-        <ToggleRow icon="repeat" label={t('form.daily')} description={t('form.dailyHint')}
+        <ToggleRow icon="repeat" label={t('form.repeat')} description={t('form.repeatHint')}
           value={input.isRecurring} onChange={(value) => set('isRecurring', value)} />
+        {input.isRecurring && (
+          <View style={{ gap: 8 }}>
+            <Row style={{ flexWrap: 'wrap' }}>
+              <Text style={styles.label}>{t('form.repeatEvery')}</Text>
+              <TextField value={everyText} keyboardType="number-pad" maxLength={3} style={{ width: 72, textAlign: 'center' }}
+                accessibilityLabel={t('form.repeatCount')}
+                onChangeText={(value) => {
+                  const digits = value.replace(/[^0-9]/g, '');
+                  setEveryText(digits);
+                  set('repeatEvery', digits ? Number(digits) : 0);
+                }} />
+              <View style={{ flex: 1, minWidth: 150 }}>
+                <Segmented<RepeatUnit> value={input.repeatUnit} onChange={(value) => set('repeatUnit', value)}
+                  options={[{ value: 'DAY', label: t('form.repeatDays') }, { value: 'WEEK', label: t('form.repeatWeeks') }]} />
+              </View>
+            </Row>
+            <AppText variant="small">
+              {isValidRepeat(input.repeatEvery, input.repeatUnit)
+                ? tp(input.repeatUnit === 'WEEK' ? 'plural.repeatPreviewWeeks' : 'plural.repeatPreviewDays', input.repeatEvery)
+                : t('form.repeatInvalid', { days: MAX_REPEAT.DAY, weeks: MAX_REPEAT.WEEK })}
+            </AppText>
+          </View>
+        )}
         <ToggleRow icon="finger-print" label={t('form.biometricsToggle')} description={t('form.biometricsHint')}
           value={input.requiresBiometrics} onChange={(value) => set('requiresBiometrics', value)} />
         <ToggleRow icon="location-outline" label={t('form.locationToggle')} description={t('form.locationHint')}

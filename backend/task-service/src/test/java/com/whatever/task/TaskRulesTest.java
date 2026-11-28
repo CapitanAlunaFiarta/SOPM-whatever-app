@@ -116,4 +116,23 @@ class TaskRulesTest {
         assertEquals(Instant.parse("2026-11-25T10:00:00Z"), TaskRules.chatClosesAt(finished));
         assertNull(TaskRules.chatClosesAt(null));
     }
+
+    @Test
+    void recurringActivitiesComeBackAfterTheChosenInterval() {
+        // Clienții vechi nu trimit intervalul: zilnic, ca înainte.
+        assertEquals("DAY", TaskRules.repeatUnit(null));
+        assertEquals("WEEK", TaskRules.repeatUnit("week"));
+        assertEquals(1, TaskRules.repeatEvery(null, "DAY"));
+        assertEquals(TODAY.plusDays(1), TaskRules.nextDue(TODAY, 1, "DAY"));
+        assertEquals(TODAY.plusDays(3), TaskRules.nextDue(TODAY, 3, "DAY"));
+        assertEquals(TODAY.plusWeeks(2), TaskRules.nextDue(TODAY, 2, "WEEK"));
+        assertEquals(365, TaskRules.repeatEvery(365, "DAY"));
+        assertEquals(52, TaskRules.repeatEvery(52, "WEEK"));
+        assertThrows(ApiException.class, () -> TaskRules.repeatUnit("MONTH"));
+        assertThrows(ApiException.class, () -> TaskRules.repeatEvery(0, "DAY"));
+        assertThrows(ApiException.class, () -> TaskRules.repeatEvery(53, "WEEK"));
+        assertThrows(ApiException.class, () -> TaskRules.repeatEvery(366, "DAY"));
+        assertEquals("", TaskRules.description(null));
+        assertEquals("Adu mingea", TaskRules.description("  Adu mingea \n"));
+    }
 }

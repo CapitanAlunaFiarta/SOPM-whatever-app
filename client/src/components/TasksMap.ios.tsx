@@ -9,15 +9,20 @@ import { colors } from './theme';
 import { AppText } from './ui';
 
 /** Harta activităților cu locație pe iOS (Apple Maps, fără cheie). Android: TasksMap.tsx, web: TasksMap.web.tsx. */
-export function TasksMap({ tasks, center, onSelect }: {
+export function TasksMap({ tasks, center, onSelect, minHeight = 320, preview }: {
   tasks: Task[];
   center: Coordinates;
   onSelect?: (task: Task) => void;
+  minHeight?: number;
+  preview?: boolean;
 }) {
   const { t } = useI18n();
+  // O singură activitate (ecranul de detalii): zoom cât să încapă toată raza.
+  const delta = tasks.length === 1 ? Math.max(0.004, (tasks[0].radius * 3) / 111_000) : 0.06;
   return (
-    <View style={styles.wrapper}>
-      <MapView style={StyleSheet.absoluteFill} initialRegion={{ ...center, latitudeDelta: 0.06, longitudeDelta: 0.06 }}
+    <View style={[styles.wrapper, { minHeight }]}>
+      <MapView style={StyleSheet.absoluteFill} initialRegion={{ ...center, latitudeDelta: delta, longitudeDelta: delta }}
+        scrollEnabled={!preview}
         showsUserLocation showsMyLocationButton>
         {tasks.map((task) => (
           <Fragment key={task.id}>
@@ -43,5 +48,5 @@ export function TasksMap({ tasks, center, onSelect }: {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { flex: 1, minHeight: 320, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
+  wrapper: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
 });

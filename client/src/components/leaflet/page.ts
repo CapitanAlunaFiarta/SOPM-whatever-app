@@ -18,7 +18,8 @@ export type MapTask = MapPoint & {
 };
 
 export type MapState =
-  | { mode: 'tasks'; center: MapPoint; tasks: MapTask[] }
+  /** preview = hartă mică într-o pagină care se derulează (detaliile unei activități): nu se trage cu degetul. */
+  | { mode: 'tasks'; center: MapPoint; tasks: MapTask[]; preview?: boolean }
   | { mode: 'picker'; value: MapPoint; radius: number };
 
 export type MapEvent = { type: 'ready' } | { type: 'pick'; latitude: number; longitude: number };
@@ -106,16 +107,23 @@ const PAGE_SCRIPT = `
       }
       return;
     }
+    if (state.preview) {
+      map.dragging.disable();
+      map.scrollWheelZoom.disable();
+      map.touchZoom.disable();
+    }
     layer.clearLayers();
-    var bounds = [];
+    var bounds = null;
     state.tasks.forEach(function (task) {
       var at = [task.latitude, task.longitude];
-      bounds.push(at);
+      // Încadrăm tot cercul razei, nu doar pinul (o rază de 1 km nu iese din hartă).
+      var box = L.latLng(at).toBounds(task.radius * 2);
+      bounds = bounds ? bounds.extend(box) : box;
       L.circle(at, { color: '#38bdf8', fillOpacity: 0.15, radius: task.radius }).addTo(layer);
       L.marker(at, { icon: pin(task.color) }).bindPopup(popup(task)).addTo(layer);
     });
-    if (bounds.length > 0) {
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 });
       fitted = true;
     } else if (!fitted) {
       map.setView([state.center.latitude, state.center.longitude], 13);
