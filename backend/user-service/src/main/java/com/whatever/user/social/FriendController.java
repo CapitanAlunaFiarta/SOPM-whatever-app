@@ -1,6 +1,8 @@
 package com.whatever.user.social;
 
 import com.whatever.user.profile.BadgeService;
+import com.whatever.user.push.Notes;
+import com.whatever.user.push.PushService;
 import com.whatever.user.security.AuthUser;
 import com.whatever.user.users.UserRepository;
 import com.whatever.user.web.ApiException;
@@ -46,12 +48,14 @@ public class FriendController {
     private final UserRepository users;
     private final RateLimiter rateLimiter;
     private final BadgeService badges;
+    private final PushService push;
 
-    public FriendController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter, BadgeService badges) {
+    public FriendController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter, BadgeService badges, PushService push) {
         this.db = db;
         this.users = users;
         this.rateLimiter = rateLimiter;
         this.badges = badges;
+        this.push = push;
     }
 
     /** Prietenii, cererile primite și cele trimise (status: FRIEND / INCOMING / OUTGOING). */
@@ -101,8 +105,10 @@ public class FriendController {
             return Map.of("status", FRIEND, "message", "Ați devenit prieteni.");
         }
         if (NONE.equals(relation)) {
-            db.update("INSERT INTO friends(user_email, friend_email, status) VALUES (?, ?, 'PENDING') ON CONFLICT DO NOTHING",
-                    auth.email(), other);
+            if (db.update("INSERT INTO friends(user_email, friend_email, status) VALUES (?, ?, 'PENDING') ON CONFLICT DO NOTHING",
+                    auth.email(), other) > 0) {
+                push.notify(other, PushService.Kind.REQUESTS, Notes.friendRequest(String.valueOf(users.require(auth.email()).get("full_name"))));
+            }
             return Map.of("status", OUTGOING, "message", "Cererea de prietenie a fost trimisă.");
         }
         return Map.of("status", relation, "message", FRIEND.equals(relation)
@@ -185,6 +191,9 @@ public class FriendController {
                 + "WHERE user_email = ? AND friend_email = ? AND status = 'PENDING'", other, me);
         // O cerere trimisă de mine în același timp devine inutilă.
         db.update("DELETE FROM friends WHERE user_email = ? AND friend_email = ? AND status = 'PENDING'", me, other);
+        Map<String, Object> mine = users.require(me);
+        push.notify(other, PushService.Kind.REQUESTS,
+                Notes.friendAccepted(String.valueOf(mine.get("full_name")), String.valueOf(mine.get("username"))));
     }
 
     private String otherEmail(String username) {

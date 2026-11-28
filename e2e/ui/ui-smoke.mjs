@@ -7,6 +7,7 @@
 // pentru codul de resetare când MAIL_PROVIDER=log), ADMIN_EMAIL, ADMIN_PASSWORD, USER_API, TASK_API
 // (prietenul din testul de grup e creat direct prin API).
 import { existsSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { crc32, deflateSync } from 'node:zlib';
 import { chromium } from 'playwright-core';
 
@@ -76,6 +77,43 @@ await context.addInitScript(() => {
   if (!media?.getUserMedia) return;
   const original = media.getUserMedia.bind(media);
   media.getUserMedia = (constraints) => new Promise((resolve) => setTimeout(resolve, 2000)).then(() => original(constraints));
+});
+// Notificări: headless Chrome nu se poate abona la un serviciu de push adevărat, așa că abonamentul e simulat (cheile
+// sunt reale, generate cu WebCrypto). Endpoint-ul e un receptor local; serverul din CI îl acceptă (PUSH_EXTRA_HOSTS).
+// Abonamentul rămâne în localStorage, ca după o reîncărcare a paginii browserul să fie tot abonat.
+await context.addInitScript(() => {
+  if (!('PushManager' in window) || !('Notification' in window)) return;
+  Object.defineProperty(Notification, 'permission', { get: () => localStorage.getItem('fake-push-permission') ?? 'default' });
+  Notification.requestPermission = async () => {
+    localStorage.setItem('fake-push-permission', 'granted');
+    return 'granted';
+  };
+  const b64 = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64 = (text) => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)).buffer;
+  const build = (saved) => ({
+    endpoint: saved.endpoint,
+    options: { applicationServerKey: unb64(saved.serverKey), userVisibleOnly: true },
+    toJSON: () => ({ endpoint: saved.endpoint, expirationTime: null, keys: saved.keys }),
+    unsubscribe: async () => {
+      localStorage.removeItem('fake-push');
+      return true;
+    },
+  });
+  PushManager.prototype.getSubscription = async function getSubscription() {
+    const saved = localStorage.getItem('fake-push');
+    return saved ? build(JSON.parse(saved)) : null;
+  };
+  PushManager.prototype.subscribe = async function subscribe(options) {
+    const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const key = options.applicationServerKey;
+    const saved = {
+      endpoint: `http://localhost:8098/ui-push/${Date.now()}`,
+      serverKey: b64(key instanceof ArrayBuffer ? key : key.buffer.slice(key.byteOffset, key.byteOffset + key.byteLength)),
+      keys: { p256dh: b64(await crypto.subtle.exportKey('raw', pair.publicKey)), auth: b64(crypto.getRandomValues(new Uint8Array(16))) },
+    };
+    localStorage.setItem('fake-push', JSON.stringify(saved));
+    return build(saved);
+  };
 });
 const page = await context.newPage();
 page.setDefaultTimeout(25_000);
@@ -684,6 +722,45 @@ if (ok) {
     await seen('Zilele tale active');
     await visible(page.getByRole('button', { name: /· finalizate: [1-9]\d*$/ })).first().waitFor();
     await button('Închide').click();
+  });
+
+  await step('notificări: pornite în browser, tipuri alese, notificare de probă (criptată) primită', async () => {
+    const received = [];
+    const receiver = createServer((request, response) => {
+      const chunks = [];
+      request.on('data', (chunk) => chunks.push(chunk));
+      request.on('end', () => {
+        received.push({ path: request.url, headers: request.headers, size: Buffer.concat(chunks).length });
+        response.writeHead(201);
+        response.end();
+      });
+    });
+    await new Promise((resolve) => receiver.listen(8098, resolve));
+    try {
+      // Pasul anterior a închis recap-ul (înapoi la Profil): așteptăm să se termine navigarea.
+      await waitPath('/profile');
+      const toggle = () => visible(page.getByRole('switch', { name: 'Notificări pe acest dispozitiv', exact: true }));
+      await toggle().click();
+      await seen('Ce notificări primești · 1 browser abonat');
+      await visible(page.getByRole('switch', { name: 'Favoruri', exact: true })).click();
+      await eventually(async () => {
+        await page.reload();
+        await seen('Ce notificări primești · 1 browser abonat');
+        const favors = visible(page.getByRole('switch', { name: 'Favoruri', exact: true }));
+        if (await favors.getAttribute('aria-checked') !== 'false') throw new Error('Preferința „Favoruri” nu s-a salvat');
+      });
+      await button('Trimite o notificare de probă').click();
+      await seen('Notificarea de probă e pe drum.');
+      await eventually(async () => {
+        if (!received.some((push) => push.path.startsWith('/ui-push/') && push.headers['content-encoding'] === 'aes128gcm')) {
+          throw new Error(`Nicio notificare criptată primită: ${JSON.stringify(received.map((push) => push.path))}`);
+        }
+      });
+      await toggle().click();
+      await page.getByText('Ce notificări primești', { exact: false }).first().waitFor({ state: 'detached' });
+    } finally {
+      receiver.close();
+    }
   });
 
   const admin = process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD;

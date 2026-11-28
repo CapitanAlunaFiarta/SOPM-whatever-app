@@ -26,6 +26,9 @@ public final class I18n {
     public static final List<String> SUPPORTED = List.of("ro", "en", "es");
     private static final Map<String, String[]> EXACT = new HashMap<>();
     private static final List<Template> TEMPLATES = new ArrayList<>();
+    /** Traducerile după textul-șablon românesc (cu {0}), pentru texte formate de server (ex. notificări). */
+    private static final Map<String, String[]> BY_TEMPLATE = new HashMap<>();
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\d+)}");
 
     private record Template(Pattern pattern, String[] targets) {
     }
@@ -49,6 +52,7 @@ public final class I18n {
                 String[] targets = {parts[1], parts[2]};
                 if (parts[0].contains("{0}")) {
                     TEMPLATES.add(new Template(templatePattern(parts[0]), targets));
+                    BY_TEMPLATE.put(parts[0], targets);
                 } else {
                     EXACT.put(parts[0], targets);
                 }
@@ -88,6 +92,28 @@ public final class I18n {
             return language(servlet.getRequest().getHeader("Accept-Language"));
         }
         return "ro";
+    }
+
+    /**
+     * Textul unui șablon românesc în limba dată, cu valorile puse în locul lui {0}, {1}... (o singură trecere, deci
+     * o valoare care conține „{1}” rămâne neatinsă). Fără traducere, rămâne textul românesc.
+     */
+    public static String format(String template, String language, Object... values) {
+        String text = template;
+        int index = "en".equals(language) ? 0 : "es".equals(language) ? 1 : -1;
+        if (index >= 0) {
+            String[] targets = template.contains("{0}") ? BY_TEMPLATE.get(template) : EXACT.get(template);
+            if (targets != null) text = targets[index];
+        }
+        Matcher matcher = PLACEHOLDER.matcher(text);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            int position = Integer.parseInt(matcher.group(1));
+            String value = position < values.length ? String.valueOf(values[position]) : matcher.group();
+            matcher.appendReplacement(result, Matcher.quoteReplacement(value));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     public static String translate(String message, String language) {

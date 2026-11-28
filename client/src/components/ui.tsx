@@ -187,7 +187,7 @@ export function ToggleRow({ label, description, value, onChange, icon }: {
 }) {
   return (
     <Pressable onPress={() => onChange(!value)} style={styles.toggleRow} accessibilityRole="switch"
-      accessibilityLabel={label} accessibilityState={{ checked: value }}>
+      accessibilityLabel={label} accessibilityState={{ checked: value }} aria-checked={value}>
       {icon ? <Ionicons name={icon} size={20} color={value ? colors.cyan : colors.faint} /> : null}
       <View style={{ flex: 1 }}>
         <Text style={styles.toggleLabel}>{label}</Text>

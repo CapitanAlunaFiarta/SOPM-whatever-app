@@ -6,6 +6,7 @@ import { request, saveSession } from './api';
 import type { Release } from './appVersion';
 import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
+import { localDate } from './dates';
 import { currentPosition } from './location';
 import type {
   ActivityChat, ActivityDays, ActivityPreview, AdminUser, CalendarLink, CalendarMonth, ChatMessage, CompletionResult, Conversation,
@@ -33,6 +34,7 @@ export const keys = {
   calendarLink: ['calendar-link'] as const,
   activityDays: ['activity-days'] as const,
   conversations: ['conversations'] as const,
+  pushSettings: ['push-settings'] as const,
   direct: (username: string) => ['direct', username] as const,
 };
 
@@ -263,7 +265,8 @@ export function useCompleteTask() {
       return request<CompletionResult>('task', `/tasks/${task.id}/verify-complete`, { method: 'POST', body });
     },
     onSuccess: (result) => {
-      updateUser({ streak: result.streak, points: result.points, freezesLeft: result.freezesLeft });
+      // O confirmare reușită înseamnă că azi ai fost activ (amintirea de seară de azi nu mai e nevoie).
+      updateUser({ streak: result.streak, points: result.points, freezesLeft: result.freezesLeft, lastActiveOn: localDate() });
       return refresh();
     },
   });
@@ -585,4 +588,38 @@ export function useChangePassword() {
       return result.message;
     },
   });
+}
+
+/** Ce notificări pe web vrea contul (toate implicit) și câte browsere are abonate. */
+export type PushSettings = Record<PushKind, boolean> & { devices: number };
+export const PUSH_KINDS = ['requests', 'messages', 'favors', 'invitations', 'updates'] as const;
+export type PushKind = (typeof PUSH_KINDS)[number];
+
+export function usePushSettings(enabled = true) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.pushSettings,
+    enabled: enabled && status === 'signedIn',
+    queryFn: () => request<PushSettings>('user', '/push/settings'),
+  });
+}
+
+export function useUpdatePushSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (changes: Partial<Record<PushKind, boolean>>) =>
+      request<PushSettings>('user', '/push/settings', { method: 'PUT', body: changes }),
+    onSuccess: (settings) => client.setQueryData(keys.pushSettings, settings),
+  });
+}
+
+export function useTestPush() {
+  return useMutation({
+    mutationFn: () => request<{ devices: number }>('user', '/push/test', { method: 'POST' }),
+  });
+}
+
+export function useRefreshPushSettings() {
+  const client = useQueryClient();
+  return () => client.invalidateQueries({ queryKey: keys.pushSettings });
 }

@@ -8,6 +8,7 @@ import { Platform, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { BadgeGrid } from '@/components/BadgeGrid';
 import { LanguagePicker } from '@/components/LanguagePicker';
+import { NotificationSettings } from '@/components/NotificationSettings';
 import { AppText, Badge, Banner, Button, Card, Row, Screen, StatTile, TextField } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
@@ -50,6 +51,7 @@ export default function ProfileScreen() {
         <AppText variant="muted">{t('language.hint')}</AppText>
         <LanguagePicker />
       </Card>
+      <NotificationSettings />
       <BiometricsCard userId={current.id} />
       <PasswordCard />
       <UpdateCard />

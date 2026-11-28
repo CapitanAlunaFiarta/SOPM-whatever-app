@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { AppState, Platform, StyleSheet, View } from 'react-native';
 
 import { ServerWaking } from '@/components/ServerWaking';
+import { NotificationBridge } from '@/components/NotificationBridge';
 import { colors } from '@/components/theme';
 import { AppText, Button, IconButton, Loading } from '@/components/ui';
 import { I18nProvider, useI18n } from '@/i18n';
@@ -66,6 +67,7 @@ export default function RootLayout() {
           <ThemeProvider value={navigationTheme}>
             <StatusBar style="light" />
             <RootNavigator />
+            <NotificationBridge />
           </ThemeProvider>
         </AuthProvider>
       </QueryClientProvider>

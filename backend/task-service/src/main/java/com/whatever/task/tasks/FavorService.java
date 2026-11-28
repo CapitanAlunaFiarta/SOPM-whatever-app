@@ -1,5 +1,7 @@
 package com.whatever.task.tasks;
 
+import com.whatever.task.push.Notes;
+import com.whatever.task.push.PushService;
 import com.whatever.task.security.AuthUser;
 import com.whatever.task.web.ApiException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,10 +35,12 @@ public class FavorService {
 
     private final JdbcTemplate db;
     private final TaskService tasks;
+    private final PushService push;
 
-    public FavorService(JdbcTemplate db, TaskService tasks) {
+    public FavorService(JdbcTemplate db, TaskService tasks, PushService push) {
         this.db = db;
         this.tasks = tasks;
+        this.push = push;
     }
 
     /** Favorurile mele (ultimele 100) și balanța cu fiecare prieten. */
@@ -92,6 +96,7 @@ public class FavorService {
                 Long.class, user.email(), doer, request.title().trim(), request.details() == null ? "" : request.details().trim(),
                 TaskRules.category(request.category()), Date.valueOf(request.dueDate()), request.latitude(), request.longitude(),
                 request.radius(), balance == FavorRules.Balance.THEY_OWE);
+        push.notify(doer, PushService.Kind.FAVORS, Notes.favorAsked(tasks.nameOf(user.email()), request.title().trim()));
         return find(id, user);
     }
 
@@ -116,6 +121,8 @@ public class FavorService {
             default -> throw new ApiException(400, "Cerere invalidă.");
         };
         db.update("UPDATE favors SET status = ?, responded_at = now() WHERE id = ?", status, id);
+        push.notify(String.valueOf(favor.get("requester_email")), PushService.Kind.FAVORS,
+                Notes.favorAnswered(tasks.nameOf(user.email()), String.valueOf(favor.get("title")), "ACCEPTED".equals(status)));
         return find(id, user);
     }
 
@@ -159,6 +166,8 @@ public class FavorService {
         db.update("UPDATE favors SET status = 'SUBMITTED', photo = ?, photo_taken_at = ?, photo_latitude = ?, photo_longitude = ?, "
                         + "submitted_at = now(), review_note = NULL WHERE id = ?",
                 photo, java.sql.Timestamp.from(takenAt), request.latitude(), request.longitude(), id);
+        push.notify(String.valueOf(favor.get("requester_email")), PushService.Kind.FAVORS,
+                Notes.favorPhoto(tasks.nameOf(user.email()), String.valueOf(favor.get("title"))));
         return find(id, user);
     }
 
@@ -181,6 +190,8 @@ public class FavorService {
             String reason = note == null ? "" : note.trim();
             db.update("UPDATE favors SET status = 'ACCEPTED', photo = NULL, photo_taken_at = NULL, review_note = ? WHERE id = ?",
                     reason.isEmpty() ? null : reason, id);
+            push.notify(String.valueOf(favor.get("doer_email")), PushService.Kind.FAVORS,
+                    Notes.favorReviewed(tasks.nameOf(user.email()), String.valueOf(favor.get("title")), false));
             return find(id, user);
         }
         LocalDate today = tasks.today();
@@ -192,6 +203,7 @@ public class FavorService {
                 doer, Date.valueOf(today), favor.get("photo_latitude"), favor.get("photo_longitude"),
                 TaskRules.storedCategory(favor.get("category")));
         tasks.credit(doer, today);
+        push.notify(doer, PushService.Kind.FAVORS, Notes.favorReviewed(tasks.nameOf(user.email()), String.valueOf(favor.get("title")), true));
         return find(id, user);
     }
 
