@@ -1,19 +1,25 @@
-import { useLocalSearchParams } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CATEGORY_ICONS, isCategory } from '@/components/categories';
+import { communityPreview } from '@/components/CommunityMessage';
 import { FavorsSection } from '@/components/FavorsSection';
-import { colors } from '@/components/theme';
+import { openProfile } from '@/components/JoinRequests';
+import { colors, radius } from '@/components/theme';
 import {
-  AppText, Badge, Banner, Button, Card, EmptyState, IconButton, Row, Screen, Segmented, TextField,
+  AppText, Badge, Banner, Button, Card, EmptyState, type IconName, Row, Screen, Segmented, TextField,
 } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { communityChatKey, taskChatKey, useSeenChats } from '@/lib/chatSeen';
 import { confirmAction } from '@/lib/dialogs';
 import {
-  useChat, useDeleteChat, useFriendAction, useFriends, useLeaderboard, useSendChat,
+  isFriend, useActivityChats, useChat, useFriendAction, useFriends, useLeaderboard,
 } from '@/lib/queries';
+import type { Friend } from '@/lib/types';
 
 const SECTIONS = ['chat', 'friends', 'favors', 'leaderboard'] as const;
 type Section = (typeof SECTIONS)[number];
@@ -39,7 +45,7 @@ export default function SocialScreen() {
         { value: 'favors', label: t('social.favors'), icon: 'hand-left-outline' },
         { value: 'leaderboard', label: t('social.leaderboard'), icon: 'trophy-outline' },
       ]} />
-      {section === 'chat' && <ChatSection />}
+      {section === 'chat' && <ChatList />}
       {section === 'friends' && <FriendsSection />}
       {section === 'favors' && <FavorsSection />}
       {section === 'leaderboard' && <LeaderboardSection />}
@@ -47,62 +53,68 @@ export default function SocialScreen() {
   );
 }
 
-function ChatSection() {
-  const { t, formatTime } = useI18n();
+/** Toate chaturile mele: comunitatea și chaturile activităților de grup, cu ultimul mesaj și ce e nou. */
+function ChatList() {
+  const { t, tp, formatTime } = useI18n();
   const { user } = useAuth();
-  const chat = useChat();
-  const send = useSendChat();
-  const remove = useDeleteChat();
-  const [text, setText] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async () => {
-    if (!text.trim()) return;
-    try {
-      await send.mutateAsync(text.trim());
-      setText('');
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
+  const community = useChat();
+  const chats = useActivityChats();
+  const { seen } = useSeenChats();
+  const latest = community.data?.[0];
+  const communityUnread = Boolean(latest && latest.senderUsername !== user?.username
+    && latest.id > (seen[communityChatKey] ?? 0));
+  const error = community.error ?? chats.error;
 
   return (
-    <View style={{ gap: 12 }}>
-      {error || chat.error ? <Banner text={error ?? errorMessage(chat.error)} onClose={() => setError(null)} /> : null}
-      <Row>
-        <View style={{ flex: 1 }}>
-          <TextField value={text} onChangeText={setText} placeholder={t('chat.placeholder')} maxLength={2000}
-            onSubmitEditing={submit} returnKeyType="send" />
-        </View>
-        <Button title={t('chat.send')} icon="send" compact loading={send.isPending} onPress={submit} />
-      </Row>
-      {(chat.data ?? []).length === 0 && !chat.isLoading ? (
-        <Card><EmptyState icon="chatbubble-ellipses-outline" title={t('chat.emptyTitle')} text={t('chat.emptyText')} /></Card>
-      ) : (
-        <Card style={{ gap: 0, paddingVertical: 6 }}>
-          {(chat.data ?? []).map((message, index) => (
-            <View key={message.id} style={[styles.message, index > 0 && styles.separator]}>
-              <Row style={{ justifyContent: 'space-between' }}>
-                <Text style={styles.sender} numberOfLines={1}>
-                  {message.senderName} <Text style={styles.handle}>@{message.senderUsername}</Text>
-                  {message.senderRole === 'ADMIN' ? <Text style={styles.admin}>  {t('chat.admin')}</Text> : null}
-                </Text>
-                <Row gap={4}>
-                  <AppText variant="small">{formatTime(message.createdAt)}</AppText>
-                  {user?.role === 'ADMIN' && (
-                    <IconButton icon="trash-outline" label={t('chat.deleteLabel')} tone="danger"
-                      onPress={async () => {
-                        if (await confirmAction(t('chat.deleteConfirm'), message.text, t('common.delete'))) remove.mutate(message.id);
-                      }} />
-                  )}
-                </Row>
-              </Row>
-              <AppText>{message.text}</AppText>
-            </View>
-          ))}
-        </Card>
-      )}
+    <View style={{ gap: 10 }}>
+      {error ? <Banner text={errorMessage(error)} /> : null}
+      <ChatRow icon="people" tone={colors.violet} title={t('chats.community')} unread={communityUnread}
+        preview={latest ? communityPreview(latest, t) : t('chats.communityHint')}
+        time={latest ? formatTime(latest.createdAt) : undefined}
+        onPress={() => router.push('/chat/community')} />
+
+      <AppText variant="heading" style={{ marginTop: 6 }}>{t('chats.activities')}</AppText>
+      {(chats.data ?? []).length === 0 && !chats.isLoading ? (
+        <Card><EmptyState icon="chatbubbles-outline" title={t('chats.noMessages')} text={t('chats.activitiesEmpty')} /></Card>
+      ) : (chats.data ?? []).map((item) => {
+        const last = item.lastMessage;
+        const unread = Boolean(last && !last.mine && last.id > (seen[taskChatKey(item.taskId)] ?? 0));
+        const category = isCategory(item.category) ? item.category : 'CHORES';
+        return (
+          <ChatRow key={item.taskId} icon={CATEGORY_ICONS[category] ?? 'chatbubbles-outline'} tone={colors.cyan}
+            title={item.title} unread={unread} time={last ? formatTime(last.createdAt) : undefined}
+            preview={last ? `${last.mine ? t('chats.you') : last.fullName}: ${last.text}` : t('chats.noMessages')}
+            meta={`${tp('plural.members', item.memberCount)}${item.readOnly ? ` · ${t('chats.closed')}` : ''}`}
+            onPress={() => router.push(`/chat/${item.taskId}`)} />
+        );
+      })}
     </View>
+  );
+}
+
+function ChatRow({ icon, tone, title, preview, time, meta, unread, onPress }: {
+  icon: IconName; tone: string; title: string; preview: string; time?: string; meta?: string; unread?: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={unread ? `${title}, ${t('chats.unread')}` : title} onPress={onPress}
+      style={({ pressed }) => [styles.chatRow, unread && styles.chatRowUnread, pressed && { opacity: 0.8 }]}>
+      <View style={[styles.chatIcon, { backgroundColor: `${tone}22` }]}>
+        <Ionicons name={icon} size={20} color={tone} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Row style={{ justifyContent: 'space-between' }} gap={8}>
+          <Text style={styles.chatTitle} numberOfLines={1}>{title}</Text>
+          {time ? <Text style={[styles.chatTime, unread && { color: colors.cyan }]}>{time}</Text> : null}
+        </Row>
+        <Row style={{ justifyContent: 'space-between' }} gap={8}>
+          <Text style={[styles.chatPreview, unread && { color: colors.text }]} numberOfLines={1}>{preview}</Text>
+          {unread ? <View style={styles.dot} /> : null}
+        </Row>
+        {meta ? <Text style={styles.chatMeta}>{meta}</Text> : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -113,18 +125,30 @@ function FriendsSection() {
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const all = friends.data ?? [];
+  const incoming = all.filter((friend) => friend.status === 'INCOMING');
+  const outgoing = all.filter((friend) => friend.status === 'OUTGOING');
+  const accepted = all.filter(isFriend);
 
-  const add = async () => {
-    const name = username.trim().replace(/^@/, '');
-    if (!name) return;
+  const run = async (name: string, kind: 'request' | 'accept' | 'decline' | 'remove') => {
     setError(null);
+    setNotice(null);
     try {
-      await action.mutateAsync({ username: name });
-      setUsername('');
-      setNotice(t('friends.added', { username: name }));
+      const result = await action.mutateAsync({ username: name, action: kind });
+      if (kind === 'request') {
+        setUsername('');
+        setNotice(result.status === 'FRIEND' ? t('friends.nowFriends', { username: name }) : t('friends.requestSent', { username: name }));
+      } else if (kind === 'accept') {
+        setNotice(t('friends.nowFriends', { username: name }));
+      }
     } catch (e) {
       setError(errorMessage(e));
     }
+  };
+
+  const add = () => {
+    const name = username.trim().replace(/^@/, '');
+    if (name) void run(name, 'request');
   };
 
   return (
@@ -133,34 +157,83 @@ function FriendsSection() {
       {notice ? <Banner tone="success" text={notice} onClose={() => setNotice(null)} /> : null}
       <Row>
         <View style={{ flex: 1 }}>
-          <TextField value={username} onChangeText={setUsername} placeholder="@username" autoCapitalize="none" onSubmitEditing={add} />
+          <TextField value={username} onChangeText={setUsername} placeholder="@username" autoCapitalize="none"
+            autoCorrect={false} onSubmitEditing={add} returnKeyType="send" />
         </View>
         <Button compact title={t('friends.add')} icon="person-add-outline" loading={action.isPending} onPress={add} />
       </Row>
       <AppText variant="small">{t('friends.hint')}</AppText>
-      {(friends.data ?? []).length === 0 && !friends.isLoading ? (
+
+      {incoming.length > 0 && (
+        <>
+          <AppText variant="heading">{t('friends.requestsTitle')}</AppText>
+          {incoming.map((friend) => (
+            <Card key={friend.username} style={{ borderColor: `${colors.cyan}66` }}>
+              <PersonRow friend={friend} />
+              <Row style={{ flexWrap: 'wrap' }}>
+                <Button compact title={t('group.accept')} icon="checkmark" onPress={() => run(friend.username, 'accept')} />
+                <Button compact variant="ghost" title={t('group.decline')} onPress={() => run(friend.username, 'decline')} />
+              </Row>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {accepted.length === 0 && incoming.length === 0 && outgoing.length === 0 && !friends.isLoading ? (
         <Card><EmptyState icon="people-outline" title={t('friends.emptyTitle')} text={t('friends.emptyText')} /></Card>
-      ) : (friends.data ?? []).map((friend) => (
-        <Card key={friend.username}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <View style={{ flex: 1 }}>
-              <AppText variant="heading">{friend.fullName}</AppText>
-              <AppText variant="muted">@{friend.username}</AppText>
-            </View>
-            <AppText style={{ color: colors.amber, fontWeight: '800', fontSize: 17 }}>🔥 {friend.streak}</AppText>
-          </Row>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <Badge tone={friend.direction === 'mutual' ? 'success' : friend.direction === 'incoming' ? 'info' : 'neutral'}
-              text={t(friend.direction === 'mutual' ? 'friends.mutual' : friend.direction === 'incoming' ? 'friends.incoming' : 'friends.outgoing')} />
-            <Button compact variant="ghost" title={t('common.delete')} onPress={async () => {
-              if (await confirmAction(t('friends.removeConfirm'), `@${friend.username}`, t('common.delete'))) {
-                action.mutate({ username: friend.username, remove: true });
-              }
-            }} />
-          </Row>
-        </Card>
-      ))}
+      ) : null}
+
+      {accepted.length > 0 && (
+        <>
+          <AppText variant="heading">{t('friends.listTitle')}</AppText>
+          {accepted.map((friend) => (
+            <Card key={friend.username}>
+              <PersonRow friend={friend} />
+              <Row style={{ justifyContent: 'flex-end' }}>
+                <Button compact variant="ghost" title={t('common.delete')} onPress={async () => {
+                  if (await confirmAction(t('friends.removeConfirm'), `@${friend.username}`, t('common.delete'))) {
+                    await run(friend.username, 'remove');
+                  }
+                }} />
+              </Row>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {outgoing.length > 0 && (
+        <>
+          <AppText variant="heading">{t('friends.sentTitle')}</AppText>
+          {outgoing.map((friend) => (
+            <Card key={friend.username}>
+              <PersonRow friend={friend} />
+              <Row style={{ justifyContent: 'space-between' }}>
+                <Badge text={t('friends.waiting')} icon="time-outline" />
+                <Button compact variant="ghost" title={t('friends.withdraw')} onPress={() => run(friend.username, 'remove')} />
+              </Row>
+            </Card>
+          ))}
+        </>
+      )}
     </View>
+  );
+}
+
+/** Numele (deschide profilul) și streak-ul unui prieten sau al cuiva care ți-a cerut prietenia. */
+function PersonRow({ friend }: { friend: Friend }) {
+  const { t } = useI18n();
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={t('chat.openProfile', { name: friend.fullName })}
+      onPress={() => openProfile(friend.username)}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <AppText variant="heading">{friend.fullName}</AppText>
+          <AppText variant="muted">@{friend.username}</AppText>
+        </View>
+        <AppText style={{ color: colors.amber, fontWeight: '800', fontSize: 17 }}>🔥 {friend.streak}</AppText>
+        <Ionicons name="chevron-forward" size={18} color={colors.faint} />
+      </Row>
+    </Pressable>
   );
 }
 
@@ -175,14 +248,16 @@ function LeaderboardSection() {
         {(leaderboard.data ?? []).map((entry, index) => {
           const me = entry.username === user?.username;
           return (
-            <Row key={entry.username} style={[styles.rank, index > 0 && styles.separator, me && styles.me]}>
+            <Pressable key={entry.username} accessibilityRole="link" accessibilityLabel={t('chat.openProfile', { name: entry.fullName })}
+              onPress={() => openProfile(entry.username)}
+              style={({ pressed }) => [styles.rank, index > 0 && styles.separator, me && styles.me, pressed && { opacity: 0.75 }]}>
               <Text style={[styles.position, index < 3 && { color: colors.amber }]}>{index + 1}</Text>
               <View style={{ flex: 1 }}>
                 <AppText style={{ fontWeight: '700' }}>{me ? t('leaderboard.you', { name: entry.fullName }) : entry.fullName}</AppText>
                 <AppText variant="small">@{entry.username} · {tp('plural.points', entry.points)}</AppText>
               </View>
               <AppText style={{ color: colors.amber, fontWeight: '800' }}>🔥 {tp('plural.days', entry.streak)}</AppText>
-            </Row>
+            </Pressable>
           );
         })}
       </Card>
@@ -191,12 +266,19 @@ function LeaderboardSection() {
 }
 
 const styles = StyleSheet.create({
-  message: { paddingVertical: 10, gap: 4 },
+  chatRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg,
+  },
+  chatRowUnread: { borderColor: `${colors.cyan}88` },
+  chatIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  chatTitle: { color: colors.text, fontWeight: '800', fontSize: 15.5, flexShrink: 1 },
+  chatTime: { color: colors.faint, fontSize: 12 },
+  chatPreview: { color: colors.muted, fontSize: 13.5, flex: 1 },
+  chatMeta: { color: colors.faint, fontSize: 12 },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.cyan },
   separator: { borderTopWidth: 1, borderTopColor: colors.border },
-  sender: { color: colors.cyan, fontWeight: '800', flexShrink: 1 },
-  handle: { color: colors.faint, fontWeight: '500' },
-  admin: { color: colors.violet, fontWeight: '800', fontSize: 12 },
-  rank: { paddingVertical: 10, paddingHorizontal: 4 },
+  rank: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 4 },
   me: { backgroundColor: `${colors.indigo}22`, borderRadius: 10 },
   position: { width: 28, color: colors.muted, fontWeight: '900', fontSize: 16 },
 });

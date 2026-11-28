@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { translate } from '../i18n/core';
 
 import { request, saveSession } from './api';
+import type { Release } from './appVersion';
 import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
 import type {
-  AdminUser, ChatMessage, CompletionResult, Favor, FavorInput, FavorList, Friend, LeaderboardEntry, Recap, Session, Task,
-  TaskInput, TaskMessage, User,
+  ActivityChat, ActivityPreview, AdminUser, ChatMessage, CompletionResult, Favor, FavorInput, FavorList, Friend, FriendStatus,
+  LeaderboardEntry, Profile, Recap, Session, Task, TaskInput, TaskMessage, User,
 } from './types';
 
 export const keys = {
@@ -22,6 +23,11 @@ export const keys = {
   taskMessages: (id: number) => ['task-messages', id] as const,
   favors: ['favors'] as const,
   favorPhoto: (id: number) => ['favor-photo', id] as const,
+  profiles: ['profile'] as const,
+  profile: (username: string) => ['profile', username] as const,
+  activityChats: ['activity-chats'] as const,
+  previews: ['activity-previews'] as const,
+  appVersion: ['app-version'] as const,
 };
 
 export function useMe() {
@@ -71,7 +77,58 @@ export function useFriends() {
   return useQuery({
     queryKey: keys.friends,
     enabled: status === 'signedIn',
+    // Cererile primite apar pe Acasă și în Social fără să reîncarci aplicația; deschiderea listei o reîmprospătează.
+    refetchInterval: 30_000,
+    refetchOnMount: 'always',
     queryFn: () => request<Friend[]>('user', '/friends'),
+  });
+}
+
+/** Prieten confirmat (un server vechi nu trimite status: acolo toți erau prieteni). */
+export const isFriend = (friend: Friend) => !friend.status || friend.status === 'FRIEND';
+
+/** Profilul public al cuiva: streak, activități finalizate și relația cu mine. */
+export function useProfile(username: string) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.profile(username),
+    enabled: status === 'signedIn' && Boolean(username),
+    queryFn: () => request<Profile>('user', `/profiles/${encodeURIComponent(username)}`),
+  });
+}
+
+/** Cea mai nouă versiune publicată a aplicației (o verifică serverul pe GitHub Releases). */
+export function useLatestRelease() {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.appVersion,
+    enabled: status === 'signedIn',
+    staleTime: 10 * 60_000,
+    queryFn: () => request<Release>('user', '/app/version'),
+  });
+}
+
+/** Chaturile activităților în care sunt membru, cu ultimul mesaj. */
+export function useActivityChats() {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.activityChats,
+    enabled: status === 'signedIn',
+    refetchInterval: 15_000,
+    refetchOnMount: 'always',
+    queryFn: () => request<ActivityChat[]>('task', '/tasks/chats'),
+  });
+}
+
+/** Ce văd despre activitățile trimise în comunitate (pentru cardurile din chat). */
+export function useActivityPreviews(ids: number[]) {
+  const { status } = useAuth();
+  const sorted = [...new Set(ids)].sort((a, b) => a - b).slice(0, 50);
+  return useQuery({
+    queryKey: [...keys.previews, sorted.join(',')],
+    enabled: status === 'signedIn' && sorted.length > 0,
+    refetchInterval: 30_000,
+    queryFn: () => request<ActivityPreview[]>('task', `/tasks/shared?ids=${sorted.join(',')}`),
   });
 }
 
@@ -168,6 +225,7 @@ export function useSendTaskMessage(id: number) {
     onSuccess: () => Promise.all([
       client.invalidateQueries({ queryKey: keys.taskMessages(id) }),
       client.invalidateQueries({ queryKey: keys.tasks }),
+      client.invalidateQueries({ queryKey: keys.activityChats }),
     ]),
   });
 }
@@ -245,14 +303,73 @@ export function useDeleteChat() {
   });
 }
 
+export type FriendAction = 'request' | 'accept' | 'decline' | 'remove';
+
+/** Cerere de prietenie, acceptare, refuz sau ștergere (inclusiv retragerea unei cereri trimise). */
 export function useFriendAction() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ username, remove }: { username: string; remove?: boolean }) =>
-      remove
-        ? request('user', `/friends/${encodeURIComponent(username)}`, { method: 'DELETE' })
-        : request('user', '/friends', { method: 'POST', body: { username } }),
-    onSuccess: () => client.invalidateQueries({ queryKey: keys.friends }),
+    mutationFn: ({ username, action }: { username: string; action: FriendAction }) => {
+      const path = `/friends/${encodeURIComponent(username)}`;
+      if (action === 'request') return request<{ status: FriendStatus }>('user', '/friends', { method: 'POST', body: { username } });
+      if (action === 'remove') return request<{ status: string }>('user', path, { method: 'DELETE' });
+      return request<{ status: string }>('user', `${path}/${action}`, { method: 'POST' });
+    },
+    // Prietenii decid și pe cine poți invita sau cui poți cere un favor.
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.friends }),
+      client.invalidateQueries({ queryKey: keys.profiles }),
+      client.invalidateQueries({ queryKey: keys.favors }),
+    ]),
+  });
+}
+
+/** Îți arăți streak-ul în chatul comunității (valoarea o pune serverul). */
+export function useShareStreak() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<{ streak: number }>('user', '/chat/streak', { method: 'POST' }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.chat }),
+  });
+}
+
+/** Organizatorul trimite activitatea în chatul comunității, ca invitație. */
+export function useShareActivity() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => request<Task>('task', `/tasks/${id}/share`, { method: 'POST' }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.chat }),
+      client.invalidateQueries({ queryKey: keys.tasks }),
+    ]),
+  });
+}
+
+/** Cer să particip la o activitate din comunitate (sau îmi retrag cererea). */
+export function useJoinActivity() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, cancel }: { id: number; cancel?: boolean }) =>
+      request<ActivityPreview>('task', `/tasks/${id}/join`, { method: cancel ? 'DELETE' : 'POST' }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.previews }),
+      client.invalidateQueries({ queryKey: keys.tasks }),
+    ]),
+  });
+}
+
+/** Organizatorul aprobă sau refuză o cerere de participare. */
+export function useJoinRequestAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, username, approve }: { taskId: number; username: string; approve: boolean }) =>
+      request<Task>('task', `/tasks/${taskId}/requests/${encodeURIComponent(username)}/${approve ? 'approve' : 'decline'}`,
+        { method: 'POST' }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: keys.tasks }),
+      client.invalidateQueries({ queryKey: keys.previews }),
+      client.invalidateQueries({ queryKey: keys.activityChats }),
+    ]),
   });
 }
 

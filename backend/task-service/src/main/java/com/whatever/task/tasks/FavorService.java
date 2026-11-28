@@ -48,7 +48,8 @@ public class FavorService {
                 .stream().map(row -> view(row, user)).toList();
         List<Map<String, Object>> balances = new ArrayList<>();
         for (Map<String, Object> friend : db.queryForList("SELECT DISTINCT u.email, u.username, u.full_name FROM users u JOIN friends f "
-                + "ON (f.user_email = ? AND f.friend_email = u.email) OR (f.friend_email = ? AND f.user_email = u.email) "
+                + "ON f.status = 'ACCEPTED' AND ((f.user_email = ? AND f.friend_email = u.email) "
+                + "OR (f.friend_email = ? AND f.user_email = u.email)) "
                 + "WHERE u.email <> ? ORDER BY u.username", user.email(), user.email(), user.email())) {
             String email = String.valueOf(friend.get("email"));
             Map<String, Object> balance = new LinkedHashMap<>();
@@ -69,7 +70,8 @@ public class FavorService {
         expireOverdue();
         String username = request.friend() == null ? "" : request.friend().trim().replaceFirst("^@", "");
         List<String> friend = db.queryForList("SELECT u.email FROM users u JOIN friends f "
-                        + "ON (f.user_email = ? AND f.friend_email = u.email) OR (f.friend_email = ? AND f.user_email = u.email) "
+                        + "ON f.status = 'ACCEPTED' AND ((f.user_email = ? AND f.friend_email = u.email) "
+                        + "OR (f.friend_email = ? AND f.user_email = u.email)) "
                         + "WHERE u.username = ? AND u.email <> ? LIMIT 1",
                 String.class, user.email(), user.email(), username, user.email());
         if (friend.isEmpty()) throw new ApiException(400, "Poți cere favoruri doar prietenilor tăi.");

@@ -70,7 +70,12 @@ jobs:
       - name: task-service (mvn verify)
         run: mvn -B -ntp -f backend/task-service/pom.xml verify > /tmp/task-build.log 2>&1 || (tail -80 /tmp/task-build.log; exit 1)
       - name: Pornește serviciile
+        env:
+          # Versiunile noi vin de la un GitHub simulat (testul API le schimbă); fără verificarea automată la pornire.
+          RELEASES_LATEST_URL: http://localhost:8099/CapitanAlunaFiarta/SOPM-whatever-app/releases/latest
+          RELEASES_INITIAL_DELAY_MS: '3600000'
         run: |
+          nohup node e2e/releases-stub.mjs 8099 > /tmp/releases-stub.log 2>&1 &
           SERVER_PORT=8081 nohup java -jar backend/user-service/target/user-service-*.jar > /tmp/user.log 2>&1 &
           SERVER_PORT=8082 nohup java -jar backend/task-service/target/task-service-*.jar > /tmp/task.log 2>&1 &
           for i in $(seq 1 90); do

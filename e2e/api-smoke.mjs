@@ -188,12 +188,28 @@ async function main() {
   const zeroLocation = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ requiresLocation: true, latitude: 0, longitude: 0 }) });
   check('task cu locație dar fără pin → 400', zeroLocation.status === 400, zeroLocation);
 
-  // --- prieteni: fără emailuri, partajare doar cu prieteni
+  // --- prieteni: cerere cu Da/Nu, fără emailuri, partajare doar cu prieteni
   const addB = await call('POST', `${USER}/friends`, { token: tokenA, body: { username: `@${userB.username}` } });
-  check('A îl adaugă pe B', addB.status === 200, addB);
+  check('A îi trimite o cerere lui B', addB.status === 200 && addB.json?.status === 'OUTGOING', addB);
   const friendsB = await call('GET', `${USER}/friends`, { token: tokenB });
-  check('B îl vede pe A, fără email', friendsB.status === 200 && friendsB.json?.[0]?.username === userA.username
-    && friendsB.json?.[0]?.direction === 'incoming' && !('email' in (friendsB.json?.[0] || {})), friendsB.json);
+  check('B vede cererea lui A, fără email', friendsB.status === 200 && friendsB.json?.[0]?.username === userA.username
+    && friendsB.json?.[0]?.status === 'INCOMING' && friendsB.json?.[0]?.direction === 'incoming'
+    && !('email' in (friendsB.json?.[0] || {})), friendsB.json);
+  const sharePending = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ friend: userB.username }) });
+  check('cât timp cererea așteaptă nu sunteți prieteni (partajare → 400)', sharePending.status === 400, sharePending);
+  const addAgain = await call('POST', `${USER}/friends`, { token: tokenA, body: { username: userB.username } });
+  check('a doua cerere nu dublează nimic', addAgain.status === 200 && addAgain.json?.status === 'OUTGOING', addAgain);
+  const acceptB = await call('POST', `${USER}/friends/${userA.username}/accept`, { token: tokenB });
+  const friendsA = await call('GET', `${USER}/friends`, { token: tokenA });
+  check('B acceptă: amândoi se văd prieteni', acceptB.status === 200 && acceptB.json?.status === 'FRIEND'
+    && friendsA.json?.find((f) => f.username === userB.username)?.status === 'FRIEND', friendsA.json);
+  const acceptMissing = await call('POST', `${USER}/friends/${userC.username}/accept`, { token: tokenB });
+  check('acceptarea unei cereri inexistente → 404', acceptMissing.status === 404, acceptMissing);
+  const cAsksB = await call('POST', `${USER}/friends`, { token: tokenC, body: { username: userB.username } });
+  const bDeclinesC = await call('POST', `${USER}/friends/${userC.username}/decline`, { token: tokenB });
+  const friendsC = await call('GET', `${USER}/friends`, { token: tokenC });
+  check('B refuză cererea lui C: cererea dispare', cAsksB.json?.status === 'OUTGOING' && bDeclinesC.status === 200
+    && !(friendsC.json || []).some((f) => f.username === userB.username), friendsC.json);
   const selfAdd = await call('POST', `${USER}/friends`, { token: tokenA, body: { username: userA.username } });
   check('nu te poți adăuga singur', selfAdd.status === 400, selfAdd);
   const shareStranger = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ friend: userC.username }) });
@@ -214,6 +230,8 @@ async function main() {
 
   // --- activități de grup: invitații, fiecare membru confirmă, chat separat de cel general
   await call('POST', `${USER}/friends`, { token: tokenC, body: { username: userA.username } });
+  const mutual = await call('POST', `${USER}/friends`, { token: tokenA, body: { username: userC.username } });
+  check('cerere în ambele sensuri → prieteni direct', mutual.status === 200 && mutual.json?.status === 'FRIEND', mutual);
   const group = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({
     title: 'Alergăm împreună', category: 'SPORT', participants: [userB.username, `@${userC.username}`, userB.username],
   }) });
@@ -350,6 +368,78 @@ async function main() {
   check('favor: intră în recap-ul celui care l-a făcut',
     recapFavor.json?.categories?.find((item) => item.category === 'CHORES')?.count >= 1, recapFavor.json);
 
+  // --- comunitate: profil public, streak arătat în chat, invitație deschisă la o activitate de grup
+  const userD = { fullName: 'Dan Test', username: `dan_${run}`, email: `dan_${run}@example.com`, password };
+  const tokenD = (await call('POST', `${USER}/users/register`, { body: userD })).json?.token;
+  const profileA = await call('GET', `${USER}/profiles/@${userA.username}`, { token: tokenD });
+  check('profil public: streak, puncte, activități finalizate, fără email', profileA.status === 200
+    && profileA.json?.username === userA.username && profileA.json.streak >= 1 && profileA.json.completed >= 1
+    && profileA.json.points >= 1 && profileA.json.relation === 'NONE' && !('email' in profileA.json), profileA.json);
+  const profileFriend = await call('GET', `${USER}/profiles/${userB.username}`, { token: tokenA });
+  const profileSelf = await call('GET', `${USER}/profiles/${userA.username}`, { token: tokenA });
+  check('profil: relația e FRIEND / SELF', profileFriend.json?.relation === 'FRIEND' && profileSelf.json?.relation === 'SELF',
+    [profileFriend.json?.relation, profileSelf.json?.relation]);
+  const noStreak = await call('POST', `${USER}/chat/streak`, { token: tokenD });
+  check('fără streak nu ai ce arăta → 400', noStreak.status === 400, noStreak);
+  const shareStreak = await call('POST', `${USER}/chat/streak`, { token: tokenA });
+  const streakChat = await call('GET', `${USER}/chat`, { token: tokenD });
+  check('streak arătat în comunitate (valoarea de pe server)', shareStreak.status === 200 && streakChat.json?.[0]?.kind === 'STREAK'
+    && streakChat.json[0].payload?.streak === shareStreak.json?.streak && streakChat.json[0].senderUsername === userA.username, streakChat.json?.[0]);
+
+  const ride = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Tură de bicicletă', category: 'SPORT', dueDate: tomorrow }) });
+  const rid = ride.json?.id;
+  const joinPrivate = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenD });
+  check('o activitate netrimisă în comunitate nu primește cereri → 404', joinPrivate.status === 404, joinPrivate);
+  const shareRide = await call('POST', `${TASK}/tasks/${rid}/share`, { token: tokenA });
+  const rideChat = await call('GET', `${USER}/chat`, { token: tokenD });
+  check('invitația apare în chatul comunității', shareRide.status === 200 && shareRide.json?.shared === true
+    && rideChat.json?.[0]?.kind === 'ACTIVITY' && rideChat.json[0].payload?.taskId === rid, rideChat.json?.[0]);
+  const shareAgain = await call('POST', `${TASK}/tasks/${rid}/share`, { token: tokenA });
+  const shareByOther = await call('POST', `${TASK}/tasks/${rid}/share`, { token: tokenB });
+  check('o singură trimitere la câteva ore, doar de organizator', shareAgain.status === 409 && shareByOther.status === 404,
+    [shareAgain.status, shareByOther.status]);
+  const previewD = await call('GET', `${TASK}/tasks/shared?ids=${rid},999999`, { token: tokenD });
+  check('previzualizare pentru oricine: fără locație și fără membri', previewD.status === 200 && previewD.json?.length === 1
+    && previewD.json[0].myStatus === 'NONE' && previewD.json[0].canJoin === true && previewD.json[0].memberCount === 1
+    && previewD.json[0].maxMembers === 30 && !('latitude' in previewD.json[0]) && !('participants' in previewD.json[0]), previewD.json);
+  const ownerJoin = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenA });
+  check('organizatorul nu-și cere singur participarea → 409', ownerJoin.status === 409, ownerJoin);
+  const dJoins = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenD });
+  const dReadsEarly = await call('GET', `${TASK}/tasks/${rid}/messages`, { token: tokenD });
+  check('D (nu e prieten) cere să participe; până la aprobare nu e membru', dJoins.status === 200
+    && dJoins.json?.myStatus === 'REQUESTED' && dReadsEarly.status === 404, [dJoins.json, dReadsEarly.status]);
+  const rideA = (await call('GET', `${TASK}/tasks`, { token: tokenA })).json?.find((task) => task.id === rid);
+  check('organizatorul vede cererea', rideA?.joinRequests?.length === 1 && rideA.joinRequests[0].username === userD.username, rideA?.joinRequests);
+  const bJoins = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenB });
+  const declineB = await call('POST', `${TASK}/tasks/${rid}/requests/${userB.username}/decline`, { token: tokenA });
+  const bAgain = await call('POST', `${TASK}/tasks/${rid}/join`, { token: tokenB });
+  const previewB = await call('GET', `${TASK}/tasks/shared?ids=${rid}`, { token: tokenB });
+  check('o cerere refuzată nu se poate repeta', bJoins.json?.myStatus === 'REQUESTED' && declineB.status === 200
+    && bAgain.status === 409 && previewB.json?.[0]?.myStatus === 'DECLINED' && previewB.json[0].canJoin === false, previewB.json);
+  const approveD = await call('POST', `${TASK}/tasks/${rid}/requests/@${userD.username}/approve`, { token: tokenA });
+  check('organizatorul aprobă: D devine membru, chatul se deschide', approveD.status === 200 && approveD.json?.memberCount === 2
+    && approveD.json.joinRequests?.length === 0 && approveD.json.chat?.available === true, approveD.json);
+  const dTasks = await call('GET', `${TASK}/tasks`, { token: tokenD });
+  const dMessage = await call('POST', `${TASK}/tasks/${rid}/messages`, { token: tokenD, body: { text: 'Vin cu bicicleta mea' } });
+  check('D vede activitatea și scrie în chatul ei', dTasks.json?.find((task) => task.id === rid)?.myStatus === 'ACCEPTED'
+    && dMessage.status === 200, dMessage);
+  const approveAgain = await call('POST', `${TASK}/tasks/${rid}/requests/${userD.username}/approve`, { token: tokenA });
+  check('o cerere aprobată nu se mai aprobă o dată → 404', approveAgain.status === 404, approveAgain);
+  const keepD = await call('PUT', `${TASK}/tasks/${rid}`, { token: tokenA, body: baseTask({
+    title: 'Tură de bicicletă', category: 'SPORT', dueDate: tomorrow, participants: [userD.username],
+  }) });
+  check('la editare rămâne membru și cine a intrat din comunitate (nu e prieten)', keepD.status === 200
+    && keepD.json?.participants?.some((p) => p.username === userD.username && p.status === 'ACCEPTED'), keepD);
+  const chatsA = await call('GET', `${TASK}/tasks/chats`, { token: tokenA });
+  const rideChatEntry = chatsA.json?.find((item) => item.taskId === rid);
+  check('lista de chaturi: ultimul mesaj și numărul de membri', chatsA.status === 200 && chatsA.json?.[0]?.taskId === rid
+    && rideChatEntry?.lastMessage?.text === 'Vin cu bicicleta mea' && rideChatEntry.lastMessage.mine === false
+    && rideChatEntry.memberCount === 2 && !('email' in rideChatEntry.lastMessage), chatsA.json?.[0]);
+  const chatsC = await call('GET', `${TASK}/tasks/chats`, { token: tokenC });
+  check('lista de chaturi conține doar activitățile tale', chatsC.status === 200 && !(chatsC.json || []).some((item) => item.taskId === rid), chatsC.json);
+  const dCancels = await call('DELETE', `${TASK}/tasks/${rid}/join`, { token: tokenD });
+  check('nu ai ce retrage după aprobare → 404', dCancels.status === 404, dCancels);
+
   // --- freeze
   const overdue = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Restant', dueDate: yesterday }) });
   check('task cu scadență ieri apare Overdue', overdue.json?.status === 'Overdue', overdue.json);
@@ -389,6 +479,27 @@ async function main() {
   const bonus = await call('POST', `${USER}/admin/users/${encodeURIComponent(userB.email)}/bonus-streak`, { token: adminLogin.json?.token });
   const meB = await call('GET', `${USER}/users/me`, { token: tokenB });
   check('bonus streak +5', bonus.status === 200 && meB.json?.streak === (beforeBonus.json?.streak ?? 0) + 5, meB.json);
+
+  // --- versiuni noi ale aplicației: serverul vede release-ul (GitHub simulat) și îl anunță o singură dată în chat
+  const releases = process.env.RELEASES_STUB || 'http://localhost:8099';
+  const setRelease = (tag) => fetch(`${releases}/__set`, { method: 'POST', body: JSON.stringify({ tag }) });
+  const updates = async () => ((await call('GET', `${USER}/chat`, { token: tokenB })).json || []).filter((m) => m.kind === 'UPDATE');
+  await setRelease('android-v2.3.0-17');
+  const baseline = await call('POST', `${USER}/admin/releases/check`, { token: adminLogin.json?.token });
+  check('versiuni: prima verificare doar notează versiunea curentă', baseline.status === 200 && baseline.json?.version === '2.3.0'
+    && baseline.json?.build === 17 && (await updates()).length === 0, baseline.json);
+  await setRelease('android-v2.4.0-18');
+  await call('POST', `${USER}/admin/releases/check`, { token: adminLogin.json?.token });
+  await call('POST', `${USER}/admin/releases/check`, { token: adminLogin.json?.token });
+  const announced = await updates();
+  check('versiune nouă → un singur mesaj de la Whatever în chat', announced.length === 1 && announced[0].senderRole === 'SYSTEM'
+    && announced[0].payload?.version === '2.4.0' && announced[0].payload?.build === 18
+    && announced[0].payload?.url?.endsWith('/releases/download/android-v2.4.0-18/whatever.apk'), announced);
+  const latestVersion = await call('GET', `${USER}/app/version`, { token: tokenC });
+  check('GET /app/version: cea mai nouă versiune', latestVersion.status === 200 && latestVersion.json?.version === '2.4.0'
+    && latestVersion.json?.build === 18, latestVersion.json);
+  const userCheck = await call('POST', `${USER}/admin/releases/check`, { token: tokenA });
+  check('verificarea forțată e doar pentru admin', userCheck.status === 403, userCheck.status);
 
   // --- resetare parolă (MAIL_PROVIDER=log în CI)
   const resetRequest = await call('POST', `${USER}/users/password-reset/request`, { body: { email: userC.email, username: userC.username } });

@@ -26,8 +26,10 @@ public final class TaskRules {
     public static final int MONTHLY_FREEZES = 3;
     /** Toleranța maximă acceptată pentru precizia GPS raportată de telefon. */
     public static final double MAX_ACCURACY_TOLERANCE_METERS = 50;
-    /** Câți prieteni pot fi invitați la o activitate. */
-    public static final int MAX_PARTICIPANTS = 10;
+    /** Câți membri poate avea o activitate de grup, cu tot cu organizator. */
+    public static final int MAX_MEMBERS = 30;
+    /** Câți oameni pot fi invitați sau primiți, în afară de organizator. */
+    public static final int MAX_PARTICIPANTS = MAX_MEMBERS - 1;
     /** Chatul unei activități de grup rămâne deschis încă 5 zile după ce activitatea s-a încheiat. */
     public static final Duration CHAT_OPEN_AFTER_FINISH = Duration.ofDays(5);
 
@@ -105,8 +107,15 @@ public final class TaskRules {
             String username = value == null ? "" : value.trim().replaceFirst("^@", "");
             if (!username.isEmpty()) unique.add(username);
         }
-        if (unique.size() > MAX_PARTICIPANTS) throw new ApiException(400, "Poți invita cel mult 10 prieteni.");
+        if (unique.size() > MAX_PARTICIPANTS) {
+            throw new ApiException(400, "O activitate poate avea cel mult 30 de membri (cu tot cu tine).");
+        }
         return new ArrayList<>(unique);
+    }
+
+    /** Nu mai e loc când membrii și invitațiile fără răspuns ocupă toate locurile (organizatorul are locul lui). */
+    public static boolean isFull(int acceptedOrInvited) {
+        return acceptedOrInvited >= MAX_PARTICIPANTS;
     }
 
     /** Și-a făcut membrul partea? La activitățile zilnice contează doar azi, la cele unice orice finalizare. */

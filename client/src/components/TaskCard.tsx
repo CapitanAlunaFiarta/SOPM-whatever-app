@@ -6,10 +6,11 @@ import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { confirmAction, showMessage } from '@/lib/dialogs';
 import { focusAvailable } from '@/lib/focus';
-import { useCompleteTask, useInviteResponse, useTaskAction } from '@/lib/queries';
+import { useCompleteTask, useInviteResponse, useShareActivity, useTaskAction } from '@/lib/queries';
 import { isMember, type Task } from '@/lib/types';
 
 import { CATEGORY_ICONS, isCategory } from './categories';
+import { JoinRequests } from './JoinRequests';
 import { colors, radius, type Tone } from './theme';
 import { Badge, Button } from './ui';
 
@@ -25,6 +26,7 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
   const complete = useCompleteTask();
   const action = useTaskAction();
   const invite = useInviteResponse();
+  const share = useShareActivity();
   const active = task.status === 'Upcoming' || task.status === 'Overdue';
   const member = isMember(task);
   const invited = task.myStatus === 'INVITED';
@@ -50,6 +52,17 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
       await invite.mutateAsync({ task, accept });
       // După acceptare se deschide direct chatul activității.
       if (accept) router.push(`/chat/${task.id}`);
+    } catch (error) {
+      showMessage(t('card.actionFailed'), errorMessage(error));
+    }
+  };
+
+  // Invitația deschisă în chatul comunității (oricine cere să participe, organizatorul aprobă).
+  const shareWithCommunity = async () => {
+    if (!(await confirmAction(t('card.shareTitle'), t('card.shareText'), t('card.shareConfirm')))) return;
+    try {
+      await share.mutateAsync(task.id);
+      showMessage(t('card.done'), t('community.shared'));
     } catch (error) {
       showMessage(t('card.actionFailed'), errorMessage(error));
     }
@@ -92,6 +105,10 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
           {task.requiresLocation && <Badge text={t('card.gps', { radius: task.radius })} icon="location-outline" tone="info" />}
           {task.requiresBiometrics && <Badge text={t('bio.generic')} icon="finger-print" tone="accent" />}
           {!task.isOwner && !invited && <Badge text={t('card.from', { username: task.ownerUsername })} icon="people-outline" />}
+          {task.shared && (
+            <Badge icon="megaphone-outline" tone="accent"
+              text={`${t('card.public')} · ${t('activityCard.members', { count: task.memberCount, max: task.maxMembers ?? 30 })}`} />
+          )}
           {people.length > 0 && member && (
             <Badge text={t('group.confirmations', { done: task.confirmedCount, total: task.memberCount })} icon="people-outline"
               tone={task.confirmedCount === task.memberCount ? 'success' : 'neutral'} />
@@ -104,6 +121,7 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
         </View>
       )}
       {invited && <Text style={styles.invite}>{t('group.inviteFrom', { username: task.ownerUsername })}</Text>}
+      {task.isOwner && !compact ? <JoinRequests task={task} /> : null}
       {waiting && !compact && <Text style={styles.meta}>{t('group.waiting')}</Text>}
 
       {invited && (
@@ -124,6 +142,10 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
           {task.chat?.available && !compact && (
             <Button compact variant="secondary" icon="chatbubbles-outline" onPress={() => router.push(`/chat/${task.id}`)}
               title={task.chat.messageCount > 0 ? t('group.chatCount', { count: task.chat.messageCount }) : t('group.chat')} />
+          )}
+          {task.isOwner && task.status === 'Upcoming' && !compact && (
+            <Button compact variant="secondary" title={t('card.share')} icon="megaphone-outline" loading={share.isPending}
+              onPress={shareWithCommunity} />
           )}
           {task.isOwner && task.status === 'Overdue' && !compact && (
             <Button compact variant="secondary" title={t('card.freeze')} icon="snow-outline" loading={action.isPending} onPress={() => run('freeze')} />
