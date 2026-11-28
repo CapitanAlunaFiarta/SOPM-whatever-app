@@ -1,5 +1,7 @@
 package com.whatever.user.social;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatever.user.security.AuthUser;
 import com.whatever.user.users.UserRepository;
 import com.whatever.user.web.ApiException;
@@ -24,18 +26,26 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Clasament, prieteni și chat global. Nu expune niciodată emailul altor utilizatori. */
+/**
+ * Clasament și chatul comunității. Nu expune niciodată emailul altor utilizatori.
+ *
+ * <p>Pe lângă textul obișnuit, chatul are mesaje speciale (kind): STREAK (cineva își arată streak-ul, calculat
+ * de server), ACTIVITY (invitație la o activitate de grup, trimisă din task-service) și UPDATE (versiune nouă a
+ * aplicației). Detaliile lor sunt în payload (JSON); textul rămâne o variantă citibilă pentru aplicațiile vechi.
+ */
 @RestController
 @RequestMapping("/api")
 public class SocialController {
     private final JdbcTemplate db;
     private final UserRepository users;
     private final RateLimiter rateLimiter;
+    private final ObjectMapper json;
 
-    public SocialController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter) {
+    public SocialController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter, ObjectMapper json) {
         this.db = db;
         this.users = users;
         this.rateLimiter = rateLimiter;
+        this.json = json;
     }
 
     @GetMapping("/leaderboard")
@@ -56,55 +66,9 @@ public class SocialController {
                 .toList();
     }
 
-    @GetMapping("/friends")
-    public List<Map<String, Object>> friends(@AuthenticationPrincipal AuthUser auth) {
-        String me = auth.email();
-        return db.queryForList(
-                "SELECT u.username, u.full_name, u.streak, u.last_streak_date, u.points, "
-                        + "EXISTS (SELECT 1 FROM friends f WHERE f.user_email = ? AND f.friend_email = u.email) AS outgoing, "
-                        + "EXISTS (SELECT 1 FROM friends f WHERE f.friend_email = ? AND f.user_email = u.email) AS incoming "
-                        + "FROM users u WHERE u.email IN ("
-                        + "  SELECT friend_email FROM friends WHERE user_email = ? "
-                        + "  UNION SELECT user_email FROM friends WHERE friend_email = ?) "
-                        + "ORDER BY u.username", me, me, me, me).stream()
-                .map(row -> {
-                    boolean outgoing = Boolean.TRUE.equals(row.get("outgoing"));
-                    boolean incoming = Boolean.TRUE.equals(row.get("incoming"));
-                    Map<String, Object> friend = new LinkedHashMap<>();
-                    friend.put("username", row.get("username"));
-                    friend.put("fullName", row.get("full_name"));
-                    friend.put("streak", users.effectiveStreak(row));
-                    friend.put("points", UserRepository.intValue(row.get("points")));
-                    friend.put("direction", outgoing && incoming ? "mutual" : outgoing ? "outgoing" : "incoming");
-                    return friend;
-                })
-                .toList();
-    }
-
-    @PostMapping("/friends")
-    public Map<String, String> addFriend(@AuthenticationPrincipal AuthUser auth, @Valid @RequestBody FriendRequest request) {
-        rateLimiter.check("friends:" + auth.email(), 30, Duration.ofMinutes(10));
-        String username = request.username().trim().replaceFirst("^@", "");
-        Map<String, Object> friend = users.findByUsername(username)
-                .orElseThrow(() -> new ApiException(404, "Utilizatorul nu există."));
-        if (auth.email().equals(friend.get("email"))) throw new ApiException(400, "Nu te poți adăuga singur.");
-        db.update("INSERT INTO friends(user_email, friend_email) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                auth.email(), friend.get("email"));
-        return Map.of("message", "Prieten adăugat.");
-    }
-
-    @DeleteMapping("/friends/{username}")
-    public Map<String, String> removeFriend(@AuthenticationPrincipal AuthUser auth, @PathVariable String username) {
-        Map<String, Object> friend = users.findByUsername(username.replaceFirst("^@", ""))
-                .orElseThrow(() -> new ApiException(404, "Utilizatorul nu există."));
-        db.update("DELETE FROM friends WHERE (user_email = ? AND friend_email = ?) OR (user_email = ? AND friend_email = ?)",
-                auth.email(), friend.get("email"), friend.get("email"), auth.email());
-        return Map.of("message", "Prieten șters.");
-    }
-
     @GetMapping("/chat")
     public List<Map<String, Object>> chat() {
-        return db.queryForList("SELECT id, sender_username, sender_name, sender_role, message_text, created_at "
+        return db.queryForList("SELECT id, sender_username, sender_name, sender_role, message_text, created_at, kind, payload "
                         + "FROM chat_messages ORDER BY id DESC LIMIT 200").stream()
                 .map(row -> {
                     String createdAt = UserRepository.isoInstant(row.get("created_at"));
@@ -116,6 +80,8 @@ public class SocialController {
                     message.put("text", row.get("message_text"));
                     message.put("time", createdAt);
                     message.put("createdAt", createdAt);
+                    message.put("kind", row.get("kind") == null ? "TEXT" : row.get("kind"));
+                    message.put("payload", payload(row.get("payload")));
                     return message;
                 })
                 .toList();
@@ -131,6 +97,24 @@ public class SocialController {
         return Map.of("ok", true);
     }
 
+    /** Își arată streak-ul în comunitate. Valoarea o pune serverul, deci nu poate fi umflată. */
+    @PostMapping("/chat/streak")
+    public Map<String, Object> shareStreak(@AuthenticationPrincipal AuthUser auth) {
+        Map<String, Object> user = users.require(auth.email());
+        int streak = users.effectiveStreak(user);
+        if (streak <= 0) throw new ApiException(400, "Nu ai încă un streak de arătat. Finalizează o activitate azi.");
+        rateLimiter.check("chat-streak:" + auth.email(), 3, Duration.ofHours(1));
+        int points = UserRepository.intValue(user.get("points"));
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("streak", streak);
+        details.put("points", points);
+        String text = "🔥 Am un streak de " + streak + (streak == 1 ? " zi" : " zile") + " în Whatever!";
+        db.update("INSERT INTO chat_messages(sender_username, sender_name, sender_role, message_text, sent_at, kind, payload) "
+                        + "VALUES (?, ?, ?, ?, ?, 'STREAK', ?)",
+                user.get("username"), user.get("full_name"), user.get("role"), text, Instant.now().toString(), write(details));
+        return Map.of("ok", true, "streak", streak);
+    }
+
     @DeleteMapping("/chat/{id}")
     public Map<String, Object> deleteChat(@AuthenticationPrincipal AuthUser auth, @PathVariable long id) {
         if (!auth.isAdmin()) throw new ApiException(403, "Acces interzis.");
@@ -138,7 +122,21 @@ public class SocialController {
         return Map.of("ok", true);
     }
 
-    public record FriendRequest(@NotBlank(message = "Scrie username-ul.") @Size(min = 2, max = 100) String username) {
+    private Object payload(Object raw) {
+        if (raw == null) return null;
+        try {
+            return json.readValue(raw.toString(), Map.class);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String write(Map<String, Object> value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     public record ChatRequest(@NotBlank(message = "Mesajul este gol.") @Size(max = 2000, message = "Mesajul e prea lung.") String text) {

@@ -88,8 +88,18 @@ class TaskRulesTest {
         assertEquals(List.of(), TaskRules.invitedUsernames(null, " "));
         // Lista nouă (chiar goală) are prioritate față de câmpul vechi.
         assertEquals(List.of(), TaskRules.invitedUsernames(List.of(), "ana"));
-        List<String> tooMany = Collections.nCopies(11, "x").stream().map(value -> value + Math.random()).toList();
+        // 29 de invitați + organizatorul = 30 de membri, limita unei activități.
+        List<String> enough = Collections.nCopies(29, "x").stream().map(value -> value + Math.random()).toList();
+        assertEquals(29, TaskRules.invitedUsernames(enough, null).size());
+        List<String> tooMany = Collections.nCopies(30, "x").stream().map(value -> value + Math.random()).toList();
         assertEquals(400, assertThrows(ApiException.class, () -> TaskRules.invitedUsernames(tooMany, null)).status());
+    }
+
+    @Test
+    void anActivityHasAtMostThirtyMembers() {
+        assertEquals(30, TaskRules.MAX_MEMBERS);
+        assertFalse(TaskRules.isFull(28));
+        assertTrue(TaskRules.isFull(29));
     }
 
     @Test

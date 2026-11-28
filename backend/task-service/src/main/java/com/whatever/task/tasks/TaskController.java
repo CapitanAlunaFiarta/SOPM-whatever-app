@@ -52,6 +52,18 @@ public class TaskController {
         return tasks.list(user);
     }
 
+    /** Chaturile activităților în care sunt membru, cu ultimul mesaj. */
+    @GetMapping("/chats")
+    public List<Map<String, Object>> chats(@AuthenticationPrincipal AuthUser user) {
+        return tasks.chats(user);
+    }
+
+    /** Ce se vede în chatul comunității despre activitățile trimise acolo; ids = "12,15" (cel mult 50). */
+    @GetMapping("/shared")
+    public List<Map<String, Object>> shared(@AuthenticationPrincipal AuthUser user, @RequestParam(required = false) List<Long> ids) {
+        return tasks.previews(user, ids);
+    }
+
     /** Recap lunar pe categorii; month = "2026-11" (implicit luna curentă). */
     @GetMapping("/recap")
     public Map<String, Object> recap(@AuthenticationPrincipal AuthUser user, @RequestParam(required = false) String month) {
@@ -96,6 +108,35 @@ public class TaskController {
         return tasks.respond(user, id, false);
     }
 
+    /** Organizatorul trimite activitatea în chatul comunității, ca invitație deschisă. */
+    @PostMapping("/{id}/share")
+    public Map<String, Object> share(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
+        return tasks.share(user, id);
+    }
+
+    /** Cerere de participare la o activitate văzută în comunitate (o aprobă organizatorul). */
+    @PostMapping("/{id}/join")
+    public Map<String, Object> join(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
+        return tasks.join(user, id);
+    }
+
+    @DeleteMapping("/{id}/join")
+    public Map<String, Object> cancelJoin(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
+        return tasks.cancelJoin(user, id);
+    }
+
+    @PostMapping("/{id}/requests/{username}/approve")
+    public Map<String, Object> approveRequest(@AuthenticationPrincipal AuthUser user, @PathVariable long id,
+                                              @PathVariable String username) {
+        return tasks.reviewRequest(user, id, username, true);
+    }
+
+    @PostMapping("/{id}/requests/{username}/decline")
+    public Map<String, Object> declineRequest(@AuthenticationPrincipal AuthUser user, @PathVariable long id,
+                                              @PathVariable String username) {
+        return tasks.reviewRequest(user, id, username, false);
+    }
+
     @GetMapping("/{id}/messages")
     public List<Map<String, Object>> messages(@AuthenticationPrincipal AuthUser user, @PathVariable long id) {
         return tasks.messages(user, id);
@@ -127,7 +168,7 @@ public class TaskController {
             /** Câmpul vechi (un singur prieten); clienții noi trimit „participants”. */
             @Size(max = 100) String friend,
             /** Usernamele prietenilor invitați; null = clientul nu știe de invitații multiple. */
-            @Size(max = 10, message = "Poți invita cel mult 10 prieteni.") List<@Size(max = 100) String> participants) {
+            @Size(max = 29, message = "O activitate poate avea cel mult 30 de membri (cu tot cu tine).") List<@Size(max = 100) String> participants) {
     }
 
     public record MessageRequest(

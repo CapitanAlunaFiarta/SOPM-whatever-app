@@ -1,5 +1,7 @@
 package com.whatever.task.tasks;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatever.task.security.AuthUser;
 import com.whatever.task.security.JwtService;
 import com.whatever.task.web.ApiException;
@@ -37,6 +39,9 @@ import java.util.Set;
  * și puncte. O activitate unică se încheie când au confirmat toți membrii și nu mai e nicio invitație
  * fără răspuns; una zilnică trece la ziua următoare când au confirmat toți. Chatul activității se
  * deschide după prima acceptare și devine doar de citit la 5 zile după încheiere (sau anulare).
+ *
+ * <p>Organizatorul poate trimite activitatea în chatul comunității. Oricine o vede acolo poate cere să participe
+ * (task_join_requests), iar organizatorul aprobă sau refuză. O activitate are cel mult 30 de membri.
  */
 @Service
 public class TaskService {
@@ -48,11 +53,13 @@ public class TaskService {
 
     private final JdbcTemplate db;
     private final JwtService jwt;
+    private final ObjectMapper json;
     private final ZoneId zone;
 
-    public TaskService(JdbcTemplate db, JwtService jwt, @Value("${app.timezone}") String timezone) {
+    public TaskService(JdbcTemplate db, JwtService jwt, ObjectMapper json, @Value("${app.timezone}") String timezone) {
         this.db = db;
         this.jwt = jwt;
+        this.json = json;
         this.zone = ZoneId.of(timezone);
     }
 
@@ -71,7 +78,7 @@ public class TaskService {
     @Transactional
     public Map<String, Object> create(AuthUser user, TaskController.TaskRequest request) {
         validateLocation(request);
-        List<String> invited = friendEmails(user, TaskRules.invitedUsernames(request.participants(), request.friend()));
+        List<String> invited = inviteeEmails(user, TaskRules.invitedUsernames(request.participants(), request.friend()), null);
         Long id = db.queryForObject("INSERT INTO tasks(title, category, priority, status, is_recurring, requires_location, "
                         + "latitude, longitude, allowed_radius_meters, requires_biometrics, due_date, owner_email, shared_with_friend) "
                         + "VALUES (?, ?, ?, 'Upcoming', ?, ?, ?, ?, ?, ?, ?, ?, '') RETURNING id",
@@ -92,7 +99,7 @@ public class TaskService {
             throw new ApiException(409, "Doar activitățile active pot fi editate.");
         }
         validateLocation(request);
-        List<String> invited = friendEmails(user, TaskRules.invitedUsernames(request.participants(), request.friend()));
+        List<String> invited = inviteeEmails(user, TaskRules.invitedUsernames(request.participants(), request.friend()), id);
         db.update("UPDATE tasks SET title = ?, category = ?, priority = ?, is_recurring = ?, due_date = ?, "
                         + "requires_location = ?, latitude = ?, longitude = ?, allowed_radius_meters = ?, requires_biometrics = ?, "
                         + "updated_at = now() WHERE id = ?",
@@ -275,6 +282,239 @@ public class TaskService {
     }
 
     /**
+     * Chaturile activităților în care sunt membru, cu ultimul mesaj (cele mai recente primele). Un chat există
+     * după ce măcar un invitat a acceptat; cele închise (doar de citit) rămân în listă.
+     */
+    public List<Map<String, Object>> chats(AuthUser user) {
+        List<Map<String, Object>> rows = db.queryForList("SELECT t.id, t.title, t.category, t.status, t.due_date, t.finished_at, "
+                + "(SELECT count(*) FROM task_participants p WHERE p.task_id = t.id AND p.status = 'ACCEPTED') AS accepted, "
+                + "(SELECT count(*) FROM task_messages m WHERE m.task_id = t.id) AS message_count, "
+                + "lm.id AS last_id, lm.body AS last_body, lm.created_at AS last_at, lm.sender_email AS last_sender, "
+                + "lu.username AS last_username, lu.full_name AS last_name "
+                + "FROM tasks t "
+                + "LEFT JOIN LATERAL (SELECT m.id, m.body, m.created_at, m.sender_email FROM task_messages m "
+                + "  WHERE m.task_id = t.id ORDER BY m.id DESC LIMIT 1) lm ON true "
+                + "LEFT JOIN users lu ON lu.email = lm.sender_email "
+                + "WHERE (t.owner_email = ? OR EXISTS (SELECT 1 FROM task_participants p WHERE p.task_id = t.id "
+                + "  AND p.user_email = ? AND p.status = 'ACCEPTED')) "
+                + "AND EXISTS (SELECT 1 FROM task_participants p WHERE p.task_id = t.id AND p.status = 'ACCEPTED') "
+                + "ORDER BY COALESCE(lm.created_at, t.updated_at) DESC LIMIT 50", user.email(), user.email());
+        LocalDate today = today();
+        return rows.stream().map(row -> {
+            Instant closesAt = TaskRules.chatClosesAt(instant(row.get("finished_at")));
+            LocalDate due = localDate(row.get("due_date"));
+            String status = String.valueOf(row.get("status"));
+            if ("Upcoming".equals(status) && due != null && due.isBefore(today)) status = "Overdue";
+            Map<String, Object> chat = new LinkedHashMap<>();
+            chat.put("taskId", row.get("id"));
+            chat.put("title", row.get("title"));
+            chat.put("category", TaskRules.storedCategory(row.get("category")));
+            chat.put("status", status);
+            chat.put("memberCount", 1 + intValue(row.get("accepted")));
+            chat.put("messageCount", intValue(row.get("message_count")));
+            chat.put("readOnly", closesAt != null && Instant.now().isAfter(closesAt));
+            chat.put("closesAt", closesAt == null ? null : closesAt.toString());
+            if (row.get("last_id") == null) {
+                chat.put("lastMessage", null);
+            } else {
+                Map<String, Object> last = new LinkedHashMap<>();
+                last.put("id", row.get("last_id"));
+                last.put("text", row.get("last_body"));
+                last.put("username", row.get("last_username"));
+                last.put("fullName", row.get("last_name"));
+                last.put("createdAt", String.valueOf(instant(row.get("last_at"))));
+                last.put("mine", user.email().equals(row.get("last_sender")));
+                chat.put("lastMessage", last);
+            }
+            return chat;
+        }).toList();
+    }
+
+    /**
+     * Organizatorul trimite activitatea în chatul comunității, ca invitație. Oricine o vede acolo poate cere
+     * să participe. Cel mult o dată la 6 ore pentru aceeași activitate.
+     */
+    @Transactional
+    public Map<String, Object> share(AuthUser user, long id) {
+        Map<String, Object> task = lockOwned(id, user);
+        LocalDate due = localDate(task.get("due_date"));
+        if (!"Upcoming".equals(task.get("status")) || due == null || due.isBefore(today())) {
+            throw new ApiException(409, "Doar activitățile active, nerestante, pot fi trimise în comunitate.");
+        }
+        Integer recent = db.queryForObject("SELECT count(*) FROM chat_messages WHERE kind = 'ACTIVITY' AND ref_id = ? "
+                + "AND created_at > now() - interval '6 hours'", Integer.class, id);
+        if (recent != null && recent > 0) {
+            throw new ApiException(409, "Ai trimis-o de curând în comunitate. Mai încearcă peste câteva ore.");
+        }
+        Map<String, Object> owner = db.queryForMap("SELECT username, full_name, role FROM users WHERE email = ?", user.email());
+        db.update("UPDATE tasks SET shared_at = COALESCE(shared_at, now()) WHERE id = ?", id);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("taskId", id);
+        details.put("title", task.get("title"));
+        details.put("category", TaskRules.storedCategory(task.get("category")));
+        details.put("dueDate", due.toString());
+        details.put("isRecurring", Boolean.TRUE.equals(task.get("is_recurring")));
+        details.put("requiresLocation", Boolean.TRUE.equals(task.get("requires_location")));
+        // Textul e pentru aplicațiile vechi; cele noi afișează un card tradus din payload.
+        String text = "📣 Vă invit la „" + task.get("title") + "” (" + due + "). Cereți să participați din Whatever.";
+        db.update("INSERT INTO chat_messages(sender_username, sender_name, sender_role, message_text, sent_at, kind, payload, ref_id) "
+                        + "VALUES (?, ?, ?, ?, ?, 'ACTIVITY', ?, ?)",
+                owner.get("username"), owner.get("full_name"), owner.get("role"), text, Instant.now().toString(), write(details), id);
+        return find(id, user);
+    }
+
+    /**
+     * Ce vede cineva din comunitate despre activitățile trimise acolo: titlu, dată, organizator, câți membri
+     * are și unde se află el (fără locație și fără lista membrilor). Cel mult 50 deodată.
+     */
+    public List<Map<String, Object>> previews(AuthUser user, List<Long> ids) {
+        List<Long> unique = ids == null ? List.of() : ids.stream().distinct().limit(50).toList();
+        if (unique.isEmpty()) return List.of();
+        Object[] args = unique.toArray();
+        String in = String.join(",", Collections.nCopies(args.length, "?"));
+        Map<Long, Integer> taken = new HashMap<>();
+        Map<Long, Integer> accepted = new HashMap<>();
+        db.queryForList("SELECT task_id, status, count(*) AS total FROM task_participants WHERE task_id IN (" + in + ") "
+                + "AND status IN ('ACCEPTED', 'INVITED') GROUP BY task_id, status", args).forEach(row -> {
+                    long taskId = longValue(row.get("task_id"));
+                    taken.merge(taskId, intValue(row.get("total")), Integer::sum);
+                    if ("ACCEPTED".equals(row.get("status"))) accepted.put(taskId, intValue(row.get("total")));
+                });
+        Object[] mine = new Object[args.length + 1];
+        mine[0] = user.email();
+        System.arraycopy(args, 0, mine, 1, args.length);
+        Map<Long, String> participant = new HashMap<>();
+        db.queryForList("SELECT task_id, status FROM task_participants WHERE user_email = ? AND task_id IN (" + in + ")", mine)
+                .forEach(row -> participant.put(longValue(row.get("task_id")), String.valueOf(row.get("status"))));
+        Map<Long, String> request = new HashMap<>();
+        db.queryForList("SELECT task_id, status FROM task_join_requests WHERE user_email = ? AND task_id IN (" + in + ")", mine)
+                .forEach(row -> request.put(longValue(row.get("task_id")), String.valueOf(row.get("status"))));
+
+        LocalDate today = today();
+        return db.queryForList(TASK_SELECT + "WHERE t.id IN (" + in + ") AND t.shared_at IS NOT NULL", args).stream().map(row -> {
+            long id = longValue(row.get("id"));
+            LocalDate due = localDate(row.get("due_date"));
+            String status = String.valueOf(row.get("status"));
+            boolean open = "Upcoming".equals(status) && due != null && !due.isBefore(today);
+            if ("Upcoming".equals(status) && !open) status = "Overdue";
+            String myStatus;
+            if (user.email().equals(row.get("owner_email"))) myStatus = "OWNER";
+            else if ("ACCEPTED".equals(participant.get(id))) myStatus = "MEMBER";
+            else if ("INVITED".equals(participant.get(id))) myStatus = "INVITED";
+            else if ("PENDING".equals(request.get(id))) myStatus = "REQUESTED";
+            else if ("DECLINED".equals(request.get(id))) myStatus = "DECLINED";
+            else myStatus = "NONE";
+            boolean full = TaskRules.isFull(taken.getOrDefault(id, 0));
+
+            Map<String, Object> preview = new LinkedHashMap<>();
+            preview.put("id", id);
+            preview.put("title", row.get("title"));
+            preview.put("category", TaskRules.storedCategory(row.get("category")));
+            preview.put("dueDate", due == null ? null : due.toString());
+            preview.put("isRecurring", Boolean.TRUE.equals(row.get("is_recurring")));
+            preview.put("requiresLocation", Boolean.TRUE.equals(row.get("requires_location")));
+            preview.put("status", status);
+            preview.put("ownerUsername", row.get("owner_username"));
+            preview.put("ownerName", row.get("owner_name"));
+            preview.put("memberCount", 1 + accepted.getOrDefault(id, 0));
+            preview.put("maxMembers", TaskRules.MAX_MEMBERS);
+            preview.put("full", full);
+            preview.put("myStatus", myStatus);
+            preview.put("canJoin", open && !full && ("NONE".equals(myStatus) || "INVITED".equals(myStatus)));
+            return preview;
+        }).toList();
+    }
+
+    /**
+     * Cerere de participare la o activitate trimisă în comunitate. Dacă organizatorul te invitase deja,
+     * cererea înseamnă că accepți invitația.
+     */
+    @Transactional
+    public Map<String, Object> join(AuthUser user, long id) {
+        Map<String, Object> task = lockTask(id);
+        if (task.get("shared_at") == null) throw new ApiException(404, "Activitatea nu există.");
+        if (user.email().equals(task.get("owner_email"))) throw new ApiException(409, "Ești organizatorul acestei activități.");
+        LocalDate due = localDate(task.get("due_date"));
+        if (!"Upcoming".equals(task.get("status")) || due == null || due.isBefore(today())) {
+            throw new ApiException(409, "Activitatea nu mai primește participanți.");
+        }
+        List<String> participant = db.queryForList("SELECT status FROM task_participants WHERE task_id = ? AND user_email = ?",
+                String.class, id, user.email());
+        if (!participant.isEmpty() && "ACCEPTED".equals(participant.get(0))) {
+            throw new ApiException(409, "Ești deja membru al acestei activități.");
+        }
+        if (!participant.isEmpty() && "INVITED".equals(participant.get(0))) {
+            respond(user, id, true);
+            return preview(user, id);
+        }
+        List<String> request = db.queryForList("SELECT status FROM task_join_requests WHERE task_id = ? AND user_email = ?",
+                String.class, id, user.email());
+        if (!request.isEmpty() && "DECLINED".equals(request.get(0))) {
+            throw new ApiException(409, "Organizatorul a refuzat deja cererea ta pentru această activitate.");
+        }
+        if (request.isEmpty()) {
+            if (isFull(id)) throw new ApiException(409, "Activitatea are deja 30 de membri.");
+            db.update("INSERT INTO task_join_requests(task_id, user_email) VALUES (?, ?)", id, user.email());
+        }
+        return preview(user, id);
+    }
+
+    /** Îți retragi cererea de participare (cât timp organizatorul nu a răspuns). */
+    @Transactional
+    public Map<String, Object> cancelJoin(AuthUser user, long id) {
+        if (db.update("DELETE FROM task_join_requests WHERE task_id = ? AND user_email = ? AND status = 'PENDING'", id, user.email()) == 0) {
+            throw new ApiException(404, "Nu ai o cerere de participare la această activitate.");
+        }
+        return preview(user, id);
+    }
+
+    /** Organizatorul aprobă (devine membru, cu chatul activității) sau refuză o cerere de participare. */
+    @Transactional
+    public Map<String, Object> reviewRequest(AuthUser user, long id, String username, boolean approve) {
+        Map<String, Object> task = lockOwned(id, user);
+        List<String> email = db.queryForList("SELECT email FROM users WHERE username = ?", String.class,
+                username == null ? "" : username.trim().replaceFirst("^@", ""));
+        if (email.isEmpty()) throw new ApiException(404, "Utilizatorul nu există.");
+        List<String> request = db.queryForList("SELECT status FROM task_join_requests WHERE task_id = ? AND user_email = ? "
+                + "FOR UPDATE", String.class, id, email.get(0));
+        if (request.isEmpty() || !"PENDING".equals(request.get(0))) {
+            throw new ApiException(404, "Cererea de participare nu mai există.");
+        }
+        if (!approve) {
+            db.update("UPDATE task_join_requests SET status = 'DECLINED', responded_at = now() WHERE task_id = ? AND user_email = ?",
+                    id, email.get(0));
+            return find(id, user);
+        }
+        if (!"Upcoming".equals(task.get("status"))) throw new ApiException(409, "Doar activitățile active primesc membri noi.");
+        if (isFull(id)) throw new ApiException(409, "Activitatea are deja 30 de membri.");
+        db.update("INSERT INTO task_participants(task_id, user_email, status, responded_at) VALUES (?, ?, 'ACCEPTED', now()) "
+                + "ON CONFLICT (task_id, user_email) DO UPDATE SET status = 'ACCEPTED', responded_at = now()", id, email.get(0));
+        db.update("DELETE FROM task_join_requests WHERE task_id = ? AND user_email = ?", id, email.get(0));
+        return find(id, user);
+    }
+
+    private Map<String, Object> preview(AuthUser user, long id) {
+        List<Map<String, Object>> found = previews(user, List.of(id));
+        if (found.isEmpty()) throw new ApiException(404, "Activitatea nu există.");
+        return found.get(0);
+    }
+
+    /** Locurile se ocupă de membri și de invitațiile fără răspuns (organizatorul are locul lui). */
+    private boolean isFull(long id) {
+        Integer taken = db.queryForObject("SELECT count(*) FROM task_participants WHERE task_id = ? "
+                + "AND status IN ('ACCEPTED', 'INVITED')", Integer.class, id);
+        return TaskRules.isFull(taken == null ? 0 : taken);
+    }
+
+    private String write(Map<String, Object> value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
      * Recap lunar: câte activități ai finalizat în fiecare categorie. Se bazează pe task_completions,
      * deci include și activitățile șterse între timp (categoria e salvată la finalizare).
      */
@@ -357,14 +597,22 @@ public class TaskService {
         }
     }
 
-    /** Emailurile prietenilor invitați (prietenia poate fi în oricare direcție); altfel 400. */
-    private List<String> friendEmails(AuthUser user, List<String> usernames) {
+    /**
+     * Emailurile celor invitați: prieteni (prietenie acceptată, în oricare direcție) sau, la editare, oameni care
+     * sunt deja în activitate (ex. intrați printr-o cerere din comunitate). Altfel 400.
+     */
+    private List<String> inviteeEmails(AuthUser user, List<String> usernames, Long taskId) {
         List<String> emails = new ArrayList<>();
         for (String username : usernames) {
             List<String> found = db.queryForList("SELECT u.email FROM users u JOIN friends f "
-                            + "ON (f.user_email = ? AND f.friend_email = u.email) OR (f.friend_email = ? AND f.user_email = u.email) "
+                            + "ON f.status = 'ACCEPTED' AND ((f.user_email = ? AND f.friend_email = u.email) "
+                            + "OR (f.friend_email = ? AND f.user_email = u.email)) "
                             + "WHERE u.username = ? AND u.email <> ? LIMIT 1",
                     String.class, user.email(), user.email(), username, user.email());
+            if (found.isEmpty() && taskId != null) {
+                found = db.queryForList("SELECT u.email FROM users u JOIN task_participants p ON p.user_email = u.email "
+                        + "WHERE p.task_id = ? AND u.username = ? AND p.status IN ('ACCEPTED', 'INVITED')", String.class, taskId, username);
+            }
             if (found.isEmpty()) {
                 throw new ApiException(400, "Poți partaja activități doar cu prietenii tăi (adaugă-i din Comunitate).");
             }
@@ -437,16 +685,30 @@ public class TaskService {
         Map<Long, Integer> messageCounts = new HashMap<>();
         db.queryForList("SELECT task_id, count(*) AS total FROM task_messages WHERE task_id IN (" + in + ") GROUP BY task_id", ids)
                 .forEach(row -> messageCounts.put(longValue(row.get("task_id")), intValue(row.get("total"))));
+        // Cererile de participare din comunitate (le vede doar organizatorul).
+        Map<Long, List<Map<String, Object>>> requests = new HashMap<>();
+        db.queryForList("SELECT r.task_id, r.requested_at, u.username, u.full_name FROM task_join_requests r "
+                        + "JOIN users u ON u.email = r.user_email WHERE r.task_id IN (" + in + ") AND r.status = 'PENDING' "
+                        + "ORDER BY r.requested_at", ids)
+                .forEach(row -> {
+                    Map<String, Object> request = new LinkedHashMap<>();
+                    request.put("username", row.get("username"));
+                    request.put("fullName", row.get("full_name"));
+                    request.put("requestedAt", String.valueOf(instant(row.get("requested_at"))));
+                    requests.computeIfAbsent(longValue(row.get("task_id")), key -> new ArrayList<>()).add(request);
+                });
 
         return rows.stream().map(row -> {
             long id = longValue(row.get("id"));
+            boolean owner = user.email().equals(row.get("owner_email"));
             return view(row, user, today, participants.getOrDefault(id, List.of()), lastDone.getOrDefault(id, Map.of()),
-                    messageCounts.getOrDefault(id, 0));
+                    messageCounts.getOrDefault(id, 0), owner ? requests.getOrDefault(id, List.of()) : List.of());
         }).toList();
     }
 
     private Map<String, Object> view(Map<String, Object> row, AuthUser user, LocalDate today,
-                                     List<Map<String, Object>> participants, Map<String, LocalDate> lastDone, int messageCount) {
+                                     List<Map<String, Object>> participants, Map<String, LocalDate> lastDone, int messageCount,
+                                     List<Map<String, Object>> joinRequests) {
         boolean recurring = Boolean.TRUE.equals(row.get("is_recurring"));
         String ownerEmail = String.valueOf(row.get("owner_email"));
         boolean isOwner = user.email().equals(ownerEmail);
@@ -514,8 +776,11 @@ public class TaskService {
         task.put("confirmedByMe", TaskRules.confirmed(myLast, recurring, today));
         task.put("participants", people);
         task.put("memberCount", members);
+        task.put("maxMembers", TaskRules.MAX_MEMBERS);
         task.put("confirmedCount", confirmed);
         task.put("chat", chat);
+        task.put("shared", row.get("shared_at") != null);
+        task.put("joinRequests", joinRequests);
         return task;
     }
 
