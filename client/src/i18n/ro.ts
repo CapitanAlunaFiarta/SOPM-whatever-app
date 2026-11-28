@@ -514,6 +514,8 @@ export const ro = {
   'share.streakText': 'Am un streak de {days} în Whatever! 🔥 {url}',
   'share.copied': 'Textul a fost copiat. Lipește-l unde vrei.',
   'home.streakRisk': 'Mai ai până la miezul nopții să-ți păstrezi streak-ul!',
+  // Profilul public al meu
+  'profile.publicView': 'Cum mă văd ceilalți',
   'plural.days': { one: '{count} zi', few: '{count} zile', other: '{count} de zile' },
   'plural.points': { one: '{count} punct', few: '{count} puncte', other: '{count} de puncte' },
   'plural.accounts': { one: '{count} cont', few: '{count} conturi', other: '{count} de conturi' },

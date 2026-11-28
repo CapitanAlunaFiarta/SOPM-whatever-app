@@ -510,6 +510,8 @@ export const es: Dictionary = {
   'share.streakText': '¡Llevo una racha de {days} en Whatever! 🔥 {url}',
   'share.copied': 'Copiado. Pégalo donde quieras.',
   'home.streakRisk': '¡Tienes hasta medianoche para mantener tu racha!',
+  // Profilul public al meu
+  'profile.publicView': 'Cómo me ven los demás',
   'plural.days': { one: '{count} día', other: '{count} días' },
   'plural.points': { one: '{count} punto', other: '{count} puntos' },
   'plural.accounts': { one: '{count} cuenta', other: '{count} cuentas' },

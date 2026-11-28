@@ -37,7 +37,15 @@ export default function ProfileScreen() {
         <StatTile label={t('stats.points')} value={current.points} hint={t('stats.pointsHint')} tone="success" />
         <StatTile label={t('stats.freeze')} value={`${current.freezesLeft}/3`} hint={t('stats.freezeHintRefill')} tone="info" />
       </Row>
-      <Button variant="secondary" title={t('recap.title')} icon="stats-chart-outline" onPress={() => router.push('/recap')} />
+      <Row style={{ flexWrap: 'wrap' }}>
+        <View style={{ flex: 1, minWidth: 160 }}>
+          <Button variant="secondary" title={t('recap.title')} icon="stats-chart-outline" onPress={() => router.push('/recap')} />
+        </View>
+        <View style={{ flex: 1, minWidth: 160 }}>
+          <Button variant="secondary" title={t('profile.publicView')} icon="eye-outline"
+            onPress={() => router.push({ pathname: '/user/[username]', params: { username: current.username } })} />
+        </View>
+      </Row>
       <Card>
         <AppText variant="heading">{t('language.title')}</AppText>
         <AppText variant="muted">{t('language.hint')}</AppText>
