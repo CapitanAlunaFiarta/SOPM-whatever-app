@@ -2,6 +2,8 @@ package com.whatever.task.tasks;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whatever.task.push.Notes;
+import com.whatever.task.push.PushService;
 import com.whatever.task.security.AuthUser;
 import com.whatever.task.security.JwtService;
 import com.whatever.task.web.ApiException;
@@ -55,12 +57,21 @@ public class TaskService {
     private final JwtService jwt;
     private final ObjectMapper json;
     private final ZoneId zone;
+    private final PushService push;
 
-    public TaskService(JdbcTemplate db, JwtService jwt, ObjectMapper json, @Value("${app.timezone}") String timezone) {
+    public TaskService(JdbcTemplate db, JwtService jwt, ObjectMapper json, @Value("${app.timezone}") String timezone,
+                       PushService push) {
         this.db = db;
         this.jwt = jwt;
         this.json = json;
         this.zone = ZoneId.of(timezone);
+        this.push = push;
+    }
+
+    /** Numele complet al cuiva (pentru textul notificărilor). */
+    String nameOf(String email) {
+        List<String> names = db.queryForList("SELECT full_name FROM users WHERE email = ?", String.class, email);
+        return names.isEmpty() ? "" : names.get(0);
     }
 
     public LocalDate today() {
@@ -93,6 +104,7 @@ public class TaskService {
         for (String email : invited) {
             db.update("INSERT INTO task_participants(task_id, user_email) VALUES (?, ?)", id, email);
         }
+        push.notify(invited, PushService.Kind.INVITATIONS, Notes.invite(nameOf(user.email()), request.title().trim(), id));
         return find(id, user);
     }
 
@@ -118,7 +130,8 @@ public class TaskService {
                 request.latitude(), request.longitude(), request.radius(), request.requiresBiometrics(),
                 description, every, unit, id);
         // Clienții vechi trimit doar „friend” (un singur prieten): atunci doar adăugăm, nu scoatem pe nimeni.
-        syncParticipants(id, invited, request.participants() != null);
+        List<String> newlyInvited = syncParticipants(id, invited, request.participants() != null);
+        push.notify(newlyInvited, PushService.Kind.INVITATIONS, Notes.invite(nameOf(user.email()), request.title().trim(), id));
         settle(id);
         return find(id, user);
     }
@@ -179,6 +192,8 @@ public class TaskService {
         // Un refuz poate fi ultimul răspuns așteptat: dacă ceilalți au confirmat deja, activitatea se încheie.
         settle(id);
         if (!accept) return Map.of("ok", true);
+        push.notify(String.valueOf(task.get("owner_email")), PushService.Kind.INVITATIONS,
+                Notes.inviteAccepted(nameOf(user.email()), String.valueOf(task.get("title")), id));
         return find(id, user);
     }
 
@@ -300,6 +315,10 @@ public class TaskService {
         }
         Long messageId = db.queryForObject("INSERT INTO task_messages(task_id, sender_email, body, reply_to) VALUES (?, ?, ?, ?) RETURNING id",
                 Long.class, id, user.email(), body, new SqlParameterValue(Types.BIGINT, replyTo));
+        List<String> others = new ArrayList<>(db.queryForList("SELECT user_email FROM task_participants WHERE task_id = ? "
+                + "AND status = 'ACCEPTED' AND user_email <> ?", String.class, id, user.email()));
+        if (!user.email().equals(task.get("owner_email"))) others.add(String.valueOf(task.get("owner_email")));
+        push.notify(others, PushService.Kind.MESSAGES, Notes.taskMessage(nameOf(user.email()), String.valueOf(task.get("title")), body, id));
         return message(db.queryForMap(MESSAGE_SELECT + "WHERE m.id = ?", messageId), user, Map.of());
     }
 
@@ -523,6 +542,8 @@ public class TaskService {
         if (request.isEmpty()) {
             if (isFull(id)) throw new ApiException(409, "Activitatea are deja 30 de membri.");
             db.update("INSERT INTO task_join_requests(task_id, user_email) VALUES (?, ?)", id, user.email());
+            push.notify(String.valueOf(task.get("owner_email")), PushService.Kind.REQUESTS,
+                    Notes.joinRequest(nameOf(user.email()), String.valueOf(task.get("title")), id));
         }
         return preview(user, id);
     }
@@ -558,6 +579,8 @@ public class TaskService {
         db.update("INSERT INTO task_participants(task_id, user_email, status, responded_at) VALUES (?, ?, 'ACCEPTED', now()) "
                 + "ON CONFLICT (task_id, user_email) DO UPDATE SET status = 'ACCEPTED', responded_at = now()", id, email.get(0));
         db.update("DELETE FROM task_join_requests WHERE task_id = ? AND user_email = ?", id, email.get(0));
+        push.notify(email.get(0), PushService.Kind.INVITATIONS,
+                Notes.joinApproved(nameOf(user.email()), String.valueOf(task.get("title")), id));
         return find(id, user);
     }
 
@@ -650,21 +673,26 @@ public class TaskService {
      * Aduce invitațiile la lista dorită. Cine a refuzat și nu mai e în listă rămâne „refuzat”; cine a refuzat
      * și e din nou în listă primește o invitație nouă. Cu replace = false (clienți vechi) doar adăugăm.
      */
-    private void syncParticipants(long id, List<String> emails, boolean replace) {
+    /** Pune invitații la zi și întoarce cine a primit acum o invitație (nou sau invitat din nou după un refuz). */
+    private List<String> syncParticipants(long id, List<String> emails, boolean replace) {
         Set<String> wanted = new LinkedHashSet<>(emails);
+        List<String> invitedNow = new ArrayList<>();
         for (Map<String, Object> row : db.queryForList("SELECT user_email, status FROM task_participants WHERE task_id = ?", id)) {
             String email = String.valueOf(row.get("user_email"));
             boolean keep = wanted.remove(email);
             if (keep && "DECLINED".equals(row.get("status"))) {
                 db.update("UPDATE task_participants SET status = 'INVITED', invited_at = now(), responded_at = NULL "
                         + "WHERE task_id = ? AND user_email = ?", id, email);
+                invitedNow.add(email);
             } else if (!keep && replace && !"DECLINED".equals(row.get("status"))) {
                 db.update("DELETE FROM task_participants WHERE task_id = ? AND user_email = ?", id, email);
             }
         }
         for (String email : wanted) {
             db.update("INSERT INTO task_participants(task_id, user_email) VALUES (?, ?)", id, email);
+            invitedNow.add(email);
         }
+        return invitedNow;
     }
 
     /**

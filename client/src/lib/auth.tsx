@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { translate } from '../i18n/core';
 
 import { ApiError, endSession, hasStoredSession, onSessionExpired, refreshSession, request, saveSession } from './api';
+import { releaseDevice } from './push';
 import type { Session, User } from './types';
 
 type Status = 'loading' | 'offline' | 'signedOut' | 'signedIn';
@@ -88,6 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [startSession]);
 
   const signOut = useCallback(async () => {
+    // Cât sesiunea e încă validă: dispozitivul nu mai primește notificările contului.
+    await releaseDevice();
     await endSession();
     queryClient.clear();
     setUser(null);

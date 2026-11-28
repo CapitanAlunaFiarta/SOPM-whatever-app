@@ -90,3 +90,24 @@ Reacție necunoscută.	Unknown reaction.	Reacción desconocida.
 Alege o reacție.	Choose a reaction.	Elige una reacción.
 Mesajul nu există.	This message doesn't exist.	El mensaje no existe.
 Poți șterge doar mesajele tale.	You can only delete your own messages.	Solo puedes borrar tus propios mensajes.
+# Notificări (Web Push)
+Invitație la o activitate	Activity invitation	Invitación a una actividad
+{0} te-a invitat la „{1}”.	{0} invited you to “{1}”.	{0} te invitó a «{1}».
+Invitație acceptată	Invitation accepted	Invitación aceptada
+{0} vine la „{1}”.	{0} is coming to “{1}”.	{0} viene a «{1}».
+Cerere de participare	Join request	Solicitud para participar
+{0} vrea să participe la „{1}”.	{0} wants to join “{1}”.	{0} quiere participar en «{1}».
+Ai fost primit	You're in	Te han aceptado
+{0} te-a primit în „{1}”.	{0} let you into “{1}”.	{0} te aceptó en «{1}».
+Un favor pentru tine	A favor for you	Un favor para ti
+{0} îți cere un favor: „{1}”.	{0} is asking you a favor: “{1}”.	{0} te pide un favor: «{1}».
+Favor acceptat	Favor accepted	Favor aceptado
+{0} a acceptat favorul „{1}”.	{0} accepted the favor “{1}”.	{0} aceptó el favor «{1}».
+Favor refuzat	Favor declined	Favor rechazado
+{0} a refuzat favorul „{1}”.	{0} declined the favor “{1}”.	{0} rechazó el favor «{1}».
+Poza pentru favor	Photo for the favor	Foto del favor
+{0} a trimis poza pentru „{1}”. Aprob-o sau respinge-o.	{0} sent the photo for “{1}”. Approve or reject it.	{0} envió la foto de «{1}». Apruébala o recházala.
+Favor aprobat	Favor approved	Favor aprobado
+{0} a aprobat poza pentru „{1}”.	{0} approved the photo for “{1}”.	{0} aprobó la foto de «{1}».
+Poza a fost respinsă	Photo rejected	Foto rechazada
+{0} a respins poza pentru „{1}”.	{0} rejected the photo for “{1}”.	{0} rechazó la foto de «{1}».

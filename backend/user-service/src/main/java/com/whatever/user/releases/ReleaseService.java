@@ -2,6 +2,8 @@ package com.whatever.user.releases;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whatever.user.push.Notes;
+import com.whatever.user.push.PushService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,13 +54,16 @@ public class ReleaseService {
             .build();
     private volatile Instant lastCheck = Instant.EPOCH;
 
+    private final PushService push;
+
     public ReleaseService(JdbcTemplate db, ObjectMapper json,
                           @Value("${app.releases.enabled:true}") boolean enabled,
-                          @Value("${app.releases.latest-url}") String latestUrl) {
+                          @Value("${app.releases.latest-url}") String latestUrl, PushService push) {
         this.db = db;
         this.json = json;
         this.enabled = enabled;
         this.latestUrl = latestUrl;
+        this.push = push;
     }
 
     public record Release(String tag, String version, int build, String url) {
@@ -138,6 +143,7 @@ public class ReleaseService {
                     + "VALUES ('whatever', 'Whatever', 'SYSTEM', ?, ?, 'UPDATE', ?)", text, Instant.now().toString(),
                     json.writeValueAsString(payload));
             log.info("Release-uri: versiunea {} anunțată în chat", release.tag());
+            push.notifyEveryone(PushService.Kind.UPDATES, Notes.update(release.version()));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }

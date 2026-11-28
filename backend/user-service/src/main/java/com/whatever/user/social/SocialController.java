@@ -2,6 +2,8 @@ package com.whatever.user.social;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whatever.user.push.Notes;
+import com.whatever.user.push.PushService;
 import com.whatever.user.security.AuthUser;
 import com.whatever.user.users.UserRepository;
 import com.whatever.user.web.ApiException;
@@ -42,12 +44,14 @@ public class SocialController {
     private final UserRepository users;
     private final RateLimiter rateLimiter;
     private final ObjectMapper json;
+    private final PushService push;
 
-    public SocialController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter, ObjectMapper json) {
+    public SocialController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter, ObjectMapper json, PushService push) {
         this.db = db;
         this.users = users;
         this.rateLimiter = rateLimiter;
         this.json = json;
+        this.push = push;
     }
 
     @GetMapping("/leaderboard")
@@ -105,14 +109,22 @@ public class SocialController {
     public Map<String, Object> postChat(@AuthenticationPrincipal AuthUser auth, @Valid @RequestBody ChatRequest request) {
         rateLimiter.check("chat:" + auth.email(), 20, Duration.ofMinutes(1));
         Map<String, Object> user = users.require(auth.email());
+        String repliedTo = null;
         if (request.replyTo() != null) {
-            Integer found = db.queryForObject("SELECT count(*) FROM chat_messages WHERE id = ?", Integer.class, request.replyTo());
-            if (found == null || found == 0) throw new ApiException(404, "Mesajul la care răspunzi nu mai există.");
+            // Autorul mesajului citat (un om, nu anunțurile aplicației), ca să afle că i s-a răspuns.
+            List<String> author = db.queryForList("SELECT u.email FROM chat_messages c LEFT JOIN users u "
+                    + "ON u.username = c.sender_username AND c.sender_role <> 'SYSTEM' WHERE c.id = ?", String.class, request.replyTo());
+            if (author.isEmpty()) throw new ApiException(404, "Mesajul la care răspunzi nu mai există.");
+            repliedTo = author.get(0);
         }
         db.update("INSERT INTO chat_messages(sender_username, sender_name, sender_role, message_text, sent_at, reply_to) "
                         + "VALUES (?, ?, ?, ?, ?, ?)",
                 user.get("username"), user.get("full_name"), user.get("role"), request.text().trim(), Instant.now().toString(),
                 new SqlParameterValue(Types.BIGINT, request.replyTo()));
+        if (repliedTo != null && !repliedTo.equals(auth.email())) {
+            push.notify(repliedTo, PushService.Kind.MESSAGES, Notes.communityReply(String.valueOf(user.get("full_name")),
+                    request.text().trim()));
+        }
         return Map.of("ok", true);
     }
 

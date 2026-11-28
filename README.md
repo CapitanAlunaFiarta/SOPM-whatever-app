@@ -79,6 +79,17 @@ Aplicația e în română, engleză și spaniolă.
   altcuiva, doar cele câștigate. Cea mai lungă serie se păstrează în `users.best_streak` (migrarea `009`, completată din istoric).
 - **Harta zilelor active** (în recap, ca pe GitHub): câte activități ai finalizat în fiecare zi din ultimele luni
   (`GET /api/tasks/calendar/activity?weeks=N`); încap atâtea săptămâni câte permite ecranul.
+- **Notificări** (fără Firebase):
+  - **Pe site (Web Push)**: din Profil → Notificări pornești notificările pe browserul respectiv și alegi tipurile (cereri de
+    prietenie și de participare, mesaje private / din activități / răspunsuri, favoruri, invitații, versiuni noi).
+    Serverul își generează o singură dată cheile VAPID (P-256, tabela `push_keys`, migrarea `011`) și trimite mesaje
+    criptate după RFC 8291 (`aes128gcm`) direct serviciilor de push ale browserelor (Google, Mozilla, Apple, Microsoft;
+    alte adrese sunt refuzate), din ambele servicii, după ce operația s-a salvat. Textul vine în limba aplicației de pe
+    acel browser. `public/push-sw.js` afișează notificarea și, la apăsare, deschide ruta ei. Pe iPhone merg doar din
+    aplicația adăugată pe ecranul principal (Safari 16.4+). La deconectare browserul se dezabonează.
+  - **Pe telefon**: o amintire de seară pentru streak, locală (`expo-notifications`, fără server): dacă până la ora aleasă
+    (19–22) n-ai confirmat nimic azi, telefonul îți amintește; după o confirmare, amintirea de azi dispare. Notificările
+    pentru cereri și mesaje ar cere Firebase în APK, așa că pe telefon vin prin site (Chrome).
 - **Limbi**: română, engleză, spaniolă. Aplicația pornește în limba telefonului/browserului (altfel engleză) și ține minte
   alegerea din Profil sau de pe ecranele de autentificare. Trimite `Accept-Language`, iar serverele traduc mesajele de eroare
   (`i18n/messages.tsv` din fiecare serviciu) și emailul de resetare a parolei.
@@ -115,6 +126,8 @@ User-service în plus:
 | `PUBLIC_URL` | Adresa site-ului; apare în linkul de resetare (`/reset?code=...`). |
 | `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN` | Domeniul pentru passkey-uri (`whatever-app-unitbv.me`). |
 | `JWT_EXPIRATION_MS`, `JWT_REFRESH_DAYS` | Durata token-ului de acces (implicit 1 h) și a sesiunii (implicit 30 de zile). |
+| `PUSH_SUBJECT` | (ambele servicii, opțional) Cine trimite notificările, în semnătura VAPID; implicit `https://whatever-app-unitbv.me`. |
+| `PUSH_EXTRA_HOSTS` | Doar pentru teste: gazde în plus acceptate ca serviciu de push (în CI, `localhost`). În producție rămâne gol. |
 
 ### Email cu Brevo (gratuit, 300 emailuri/zi)
 
@@ -170,13 +183,16 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 - **Backend**: `mvn verify` pentru ambele servicii, migrațiile pe un Postgres real și `e2e/api-smoke.mjs` — teste end-to-end
   pentru sesiuni, finalizări, streak, biometrie, locație, prieteni, freeze, admin, resetare parolă, CORS și rate limiting,
   plus traducerea erorilor, categorii și recap, activități de grup cu chat și favoruri (datorii, refuz „nerezonabil”, poză, aprobare),
-  reacții și răspunsuri în chaturi și mesaje private (doar între prieteni, citit/necitit, doar de citit după despărțire).
+  reacții și răspunsuri în chaturi și mesaje private (doar între prieteni, citit/necitit, doar de citit după despărțire),
+  notificările pe web (un serviciu de push simulat în test: mesajul se decriptează ca în browser, semnătura VAPID se
+  verifică, iar preferințele și dezabonarea sunt respectate).
 - **Docker**: construiește imaginile ca pe Render și măsoară pornirea cu limitele planului gratuit.
 - **Teste UI** (`e2e/ui/ui-smoke.mjs`): aplicația web, construită pentru backend-ul pornit în CI, rulează într-un Chrome
   headless cu un passkey virtual: cont nou, activități simple / cu passkey / cu locație (inclusiv refuz de departe),
   streak și puncte, cercul de progres, recap-ul lunar, o activitate cu un prieten și chatul ei, un favor confirmat cu poza
   făcută de camera falsă a lui Chrome (pornită cu întârziere, ca pe un telefon lent), chat cu reacție și răspuns, un mesaj
-  privat cu „Văzut”, deconectare, rute protejate,
+  privat cu „Văzut”, notificările pornite în browser (abonament simulat, notificare de probă primită), deconectare,
+  rute protejate,
   schimbarea limbii, resetare parolă cu codul din email, panoul de admin.
 - **Aplicația Expo**: TypeScript, ESLint, teste jest (inclusiv compatibilitatea semnăturii Ed25519 a telefonului cu
   verificarea din user-service), build-ul web pentru Netlify și bundle-urile JavaScript pentru Android și iOS.

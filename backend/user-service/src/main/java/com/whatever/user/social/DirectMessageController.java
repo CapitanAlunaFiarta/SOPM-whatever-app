@@ -1,5 +1,7 @@
 package com.whatever.user.social;
 
+import com.whatever.user.push.Notes;
+import com.whatever.user.push.PushService;
 import com.whatever.user.security.AuthUser;
 import com.whatever.user.users.UserRepository;
 import com.whatever.user.web.ApiException;
@@ -44,11 +46,13 @@ public class DirectMessageController {
     private final JdbcTemplate db;
     private final UserRepository users;
     private final RateLimiter rateLimiter;
+    private final PushService push;
 
-    public DirectMessageController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter) {
+    public DirectMessageController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter, PushService push) {
         this.db = db;
         this.users = users;
         this.rateLimiter = rateLimiter;
+        this.push = push;
     }
 
     /** Conversațiile mele, cu ultimul mesaj și câte mesaje necitite am de la fiecare (cele mai recente primele). */
@@ -131,6 +135,8 @@ public class DirectMessageController {
                 + "RETURNING id", Long.class, auth.email(), otherEmail, request.text().strip(),
                 new SqlParameterValue(Types.BIGINT, request.replyTo()));
         Map<String, Object> row = db.queryForMap(MESSAGE_SELECT + "WHERE m.id = ?", id);
+        push.notify(otherEmail, PushService.Kind.MESSAGES, Notes.directMessage(String.valueOf(row.get("full_name")),
+                String.valueOf(row.get("username")), request.text().strip()));
         return message(row, auth.email(), Map.of());
     }
 

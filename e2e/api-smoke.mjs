@@ -1,6 +1,9 @@
 // Test end-to-end al API-ului (user-service + task-service) pe o bază de date reală.
 // Rulează în CI: node e2e/api-smoke.mjs
-import { generateKeyPairSync, sign } from 'node:crypto';
+import {
+  createDecipheriv, createECDH, createHmac, createPublicKey, generateKeyPairSync, randomBytes, sign, verify,
+} from 'node:crypto';
+import { createServer } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { crc32, deflateSync } from 'node:zlib';
 
@@ -76,6 +79,40 @@ const password = 'parola-foarte-sigura-123';
 const userA = { fullName: 'Ana Test', username: `ana_${run}`, email: `ana_${run}@example.com`, password };
 const userB = { fullName: 'Bob Test', username: `bob_${run}`, email: `bob_${run}@example.com`, password };
 const userC = { fullName: 'Cip Test', username: `cip_${run}`, email: `cip_${run}@example.com`, password };
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// --- Web Push văzut din browser: decriptarea RFC 8291 (aes128gcm) și verificarea semnăturii VAPID (RFC 8292).
+const hmac = (key, ...parts) => parts.reduce((mac, part) => mac.update(part), createHmac('sha256', key)).digest();
+function decryptPush(body, ecdh, auth) {
+  const salt = body.subarray(0, 16);
+  const keyLength = body[20];
+  const serverPublic = body.subarray(21, 21 + keyLength);
+  const ciphertext = body.subarray(21 + keyLength);
+  const prkKey = hmac(auth, ecdh.computeSecret(serverPublic));
+  const ikm = hmac(prkKey, Buffer.from('WebPush: info\0'), ecdh.getPublicKey(), serverPublic, Buffer.from([1]));
+  const prk = hmac(salt, ikm);
+  const cek = hmac(prk, Buffer.from('Content-Encoding: aes128gcm\0'), Buffer.from([1])).subarray(0, 16);
+  const nonce = hmac(prk, Buffer.from('Content-Encoding: nonce\0'), Buffer.from([1])).subarray(0, 12);
+  const decipher = createDecipheriv('aes-128-gcm', cek, nonce);
+  decipher.setAuthTag(ciphertext.subarray(ciphertext.length - 16));
+  const plain = Buffer.concat([decipher.update(ciphertext.subarray(0, ciphertext.length - 16)), decipher.final()]);
+  let end = plain.length - 1;
+  while (end > 0 && plain[end] === 0) end -= 1;
+  if (plain[end] !== 2) throw new Error('Lipsește delimitatorul 0x02');
+  return { recordSize: body.readUInt32BE(16), message: JSON.parse(plain.subarray(0, end).toString('utf8')) };
+}
+function vapidValid(authorization, publicKey, audience) {
+  const match = /^vapid t=([^,]+), k=(.+)$/.exec(authorization ?? '');
+  if (!match || match[2] !== publicKey) return false;
+  const [header, claims, signature] = match[1].split('.');
+  const raw = Buffer.from(publicKey, 'base64url');
+  const key = createPublicKey({ format: 'jwk', key: { kty: 'EC', crv: 'P-256',
+    x: raw.subarray(1, 33).toString('base64url'), y: raw.subarray(33, 65).toString('base64url') } });
+  const signed = verify('sha256', Buffer.from(`${header}.${claims}`), { key, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url'));
+  const payload = JSON.parse(Buffer.from(claims, 'base64url').toString('utf8'));
+  return signed && payload.aud === audience && payload.exp > Date.now() / 1000 && /^(https:|mailto:)/.test(payload.sub);
+}
 
 const baseTask = (overrides = {}) => ({
   title: 'Task de test', category: 'CHORES', priority: 'Medium', dueDate: today, isRecurring: false,
@@ -805,6 +842,91 @@ async function main() {
     check('USER_LOG disponibil pentru testul de resetare', false, USER_LOG);
   }
   void tokenC;
+
+  // --- notificări pe web (Web Push, fără Firebase): abonare, criptare și semnătură, preferințe, evenimente din ambele
+  //     servicii. Serviciul de push e simulat aici (în CI serverele au PUSH_EXTRA_HOSTS=localhost).
+  const pushes = [];
+  const pushServer = createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      pushes.push({ path: request.url, headers: request.headers, body: Buffer.concat(chunks) });
+      // Un browser care s-a dezabonat: serviciul de push răspunde 410 Gone.
+      response.writeHead(request.url.startsWith('/gone/') ? 410 : 201);
+      response.end();
+    });
+  });
+  await new Promise((resolve) => pushServer.listen(8098, resolve));
+  const waitPush = async (path, after) => {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const found = pushes.slice(after).find((push) => push.path === path);
+      if (found) return found;
+      await sleep(200);
+    }
+    return null;
+  };
+  const vapid = await call('GET', `${USER}/push/key`, { token: tokenA });
+  const vapidKey = vapid.json?.publicKey ?? '';
+  check('push: cheia publică VAPID (P-256, 65 de octeți)', vapid.status === 200
+    && Buffer.from(vapidKey, 'base64url').length === 65 && Buffer.from(vapidKey, 'base64url')[0] === 4, vapid.json);
+  const browserA = createECDH('prime256v1');
+  browserA.generateKeys();
+  const authA = randomBytes(16);
+  const keysA = { p256dh: browserA.getPublicKey().toString('base64url'), auth: authA.toString('base64url') };
+  const pathA = `/push/${run}/a`;
+  const subscribeA = await call('POST', `${USER}/push/subscriptions`, { token: tokenA,
+    body: { endpoint: `http://localhost:8098${pathA}`, keys: keysA, language: 'en' } });
+  const subscribeGone = await call('POST', `${USER}/push/subscriptions`, { token: tokenA,
+    body: { endpoint: `http://localhost:8098/gone/${run}`, keys: keysA, language: 'ro' } });
+  check('push: A își abonează două browsere', subscribeA.status === 200 && subscribeGone.json?.devices === 2, [subscribeA.json, subscribeGone.json]);
+  const badEndpoint = await call('POST', `${USER}/push/subscriptions`, { token: tokenA,
+    body: { endpoint: 'https://evil.example/push', keys: keysA } });
+  const badKey = await call('POST', `${USER}/push/subscriptions`, { token: tokenA,
+    body: { endpoint: `http://localhost:8098${pathA}x`, keys: { p256dh: Buffer.alloc(65).toString('base64url'), auth: keysA.auth } } });
+  check('push: un endpoint necunoscut sau o cheie invalidă → 400', badEndpoint.status === 400 && badKey.status === 400,
+    [badEndpoint.status, badKey.status]);
+  let mark = pushes.length;
+  const testPush = await call('POST', `${USER}/push/test`, { token: tokenA });
+  const delivered = await waitPush(pathA, mark);
+  const testMessage = delivered ? decryptPush(delivered.body, browserA, authA) : null;
+  check('push: notificarea de test ajunge criptată (aes128gcm), semnată VAPID, în limba abonamentului', testPush.status === 200
+    && delivered?.headers['content-encoding'] === 'aes128gcm' && Number(delivered.headers.ttl) > 0
+    && vapidValid(delivered.headers.authorization, vapidKey, 'http://localhost:8098')
+    && testMessage?.message.title === 'Notifications work!' && testMessage.message.url === '/profile' && testMessage.recordSize === 4096,
+  { headers: delivered?.headers, testMessage });
+  let afterGone = await call('GET', `${USER}/push/settings`, { token: tokenA });
+  for (let attempt = 0; attempt < 25 && afterGone.json?.devices !== 1; attempt += 1) {
+    await sleep(200);
+    afterGone = await call('GET', `${USER}/push/settings`, { token: tokenA });
+  }
+  check('push: browserul care a răspuns 410 (dezabonat) e scos', afterGone.json?.devices === 1, afterGone.json);
+  check('push: implicit primești toate tipurile', ['requests', 'messages', 'favors', 'invitations', 'updates']
+    .every((kind) => afterGone.json?.[kind] === true), afterGone.json);
+  const muted = await call('PUT', `${USER}/push/settings`, { token: tokenA, body: { messages: false } });
+  check('push: oprești doar mesajele', muted.status === 200 && muted.json?.messages === false && muted.json.requests === true, muted.json);
+  mark = pushes.length;
+  await call('POST', `${USER}/dm/${userA.username}`, { token: tokenB, body: { text: 'Ești acolo?' } });
+  await sleep(1500);
+  check('push: cu mesajele oprite nu primești notificare pentru un mesaj privat', !pushes.slice(mark).some((push) => push.path === pathA),
+    pushes.slice(mark).map((push) => push.path));
+  await call('PUT', `${USER}/push/settings`, { token: tokenA, body: { messages: true } });
+  mark = pushes.length;
+  await call('POST', `${USER}/dm/${userA.username}`, { token: tokenB, body: { text: 'Hai la alergare!' } });
+  const dmDelivery = await waitPush(pathA, mark);
+  const dmPush = dmDelivery ? decryptPush(dmDelivery.body, browserA, authA).message : null;
+  check('push: mesaj privat → titlul e numele, textul e mesajul, linkul duce la conversație', dmPush?.title === userB.fullName
+    && dmPush.body === 'Hai la alergare!' && dmPush.url === `/chat/dm/${userB.username}`, dmPush);
+  mark = pushes.length;
+  const pushTask = await call('POST', `${TASK}/tasks`, { token: tokenB, body: baseTask({ title: 'Fotbal duminică', participants: [userA.username] }) });
+  const inviteDelivery = await waitPush(pathA, mark);
+  const invitePush = inviteDelivery ? decryptPush(inviteDelivery.body, browserA, authA).message : null;
+  check('push: invitația trimisă de task-service ajunge la A, tradusă', pushTask.status === 200 && invitePush?.title === 'Activity invitation'
+    && invitePush.body === `${userB.fullName} invited you to “Fotbal duminică”.` && invitePush.url === `/activity/${pushTask.json?.id}`, invitePush);
+  const unsubscribed = await call('POST', `${USER}/push/unsubscribe`, { token: tokenA, body: { endpoint: `http://localhost:8098${pathA}` } });
+  const testWithout = await call('POST', `${USER}/push/test`, { token: tokenA });
+  check('push: după dezabonare nu mai ai dispozitive (test → 409)', unsubscribed.json?.devices === 0 && testWithout.status === 409,
+    [unsubscribed.json, testWithout.status]);
+  pushServer.close();
 
   // --- CORS
   const preflightOk = await call('OPTIONS', `${TASK}/tasks`, { headers: { Origin: 'https://deploy-preview-7--whatever-unitbv.netlify.app', 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'authorization' } });
