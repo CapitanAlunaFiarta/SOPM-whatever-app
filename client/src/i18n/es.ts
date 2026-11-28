@@ -685,6 +685,11 @@ export const es: Dictionary = {
   'reminder.startBody': 'Confirma una actividad hoy y tu racha empieza en 1.',
   // Comun
   'common.openSettings': 'Abrir ajustes',
+  // Widgetul Android cu streak-ul
+  'widget.zero': 'días seguidos',
+  'widget.done': 'Hoy: hecho ✓',
+  'widget.pending': 'Hoy: nada aún',
+  'widget.start': 'Empieza una hoy',
   'plural.days': { one: '{count} día', other: '{count} días' },
   'plural.points': { one: '{count} punto', other: '{count} puntos' },
   'plural.accounts': { one: '{count} cuenta', other: '{count} cuentas' },
@@ -707,4 +712,5 @@ export const es: Dictionary = {
   'plural.lastWeeks': { one: 'la última semana', other: 'las últimas {count} semanas' },
   'plural.unreadMessages': { one: '{count} mensaje nuevo', other: '{count} mensajes nuevos' },
   'plural.pushDevices': { one: '{count} navegador suscrito', other: '{count} navegadores suscritos' },
+  'plural.widgetDays': { one: 'día seguido', other: 'días seguidos' },
 };

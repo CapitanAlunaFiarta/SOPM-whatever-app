@@ -69,7 +69,14 @@ jobs:
           if ! grep -aq 'FocusGuard' /tmp/apk-classes.dex; then
             echo "::error title=APK::Modulul nativ focus-guard lipsește din APK"; exit 1
           fi
-          echo "::notice title=APK::whatever.apk ${size}, versionCode ${ANDROID_VERSION_CODE}, module hartă: ${linked}, focus-guard inclus"
+          # La fel pentru widgetul cu streak-ul (client/modules/streak-widget): clasa lui și declarația din manifest.
+          if ! grep -aq 'StreakWidgetProvider' /tmp/apk-classes.dex; then
+            echo "::error title=APK::Widgetul cu streak-ul lipsește din APK"; exit 1
+          fi
+          if ! grep -rqs --include=AndroidManifest.xml 'StreakWidgetProvider' android/app/build/intermediates; then
+            echo "::error title=APK::Widgetul cu streak-ul nu e declarat în manifest"; exit 1
+          fi
+          echo "::notice title=APK::whatever.apk ${size}, versionCode ${ANDROID_VERSION_CODE}, module hartă: ${linked}, focus-guard și widget incluse"
       - uses: actions/upload-artifact@v4
         with:
           name: whatever-android-apk

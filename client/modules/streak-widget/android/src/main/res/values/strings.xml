@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Implicit în engleză (ca aplicația, pentru limbile pe care nu le are); română și spaniolă în values-ro / values-es.
+     Textele afișate după prima deschidere a aplicației le trimite aplicația, în limba aleasă acolo. -->
+<resources>
+  <string name="streak_widget_label">Whatever streak</string>
+  <string name="streak_widget_description">Your streak and whether you confirmed something today.</string>
+  <string name="streak_widget_placeholder_value" translatable="false">🔥</string>
+  <string name="streak_widget_placeholder_label">Streak</string>
+  <string name="streak_widget_open">Open Whatever</string>
+</resources>

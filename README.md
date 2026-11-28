@@ -90,6 +90,10 @@ Aplicația e în română, engleză și spaniolă.
   - **Pe telefon**: o amintire de seară pentru streak, locală (`expo-notifications`, fără server): dacă până la ora aleasă
     (19–22) n-ai confirmat nimic azi, telefonul îți amintește; după o confirmare, amintirea de azi dispare. Notificările
     pentru cereri și mesaje ar cere Firebase în APK, așa că pe telefon vin prin site (Chrome).
+- **Widget Android** (2×2, pe ecranul principal): streak-ul și starea zilei („Azi: gata ✓”, „Azi: încă nimic” sau
+  „Începe azi unul nou”); apăsarea deschide aplicația. Modulul Kotlin local `client/modules/streak-widget` (AppWidgetProvider)
+  primește de la aplicație streak-ul, ziua ultimei confirmări și textele în limba aleasă; între timp widgetul își dă
+  seama singur, fără internet, de o zi nouă sau de un streak rupt (ora României). La deconectare se golește.
 - **Limbi**: română, engleză, spaniolă. Aplicația pornește în limba telefonului/browserului (altfel engleză) și ține minte
   alegerea din Profil sau de pe ecranele de autentificare. Trimite `Accept-Language`, iar serverele traduc mesajele de eroare
   (`i18n/messages.tsv` din fiecare serviciu) și emailul de resetare a parolei.
@@ -197,4 +201,4 @@ Proiectele Supabase gratuite se pun pe pauză după 7 zile de inactivitate — v
 - **Aplicația Expo**: TypeScript, ESLint, teste jest (inclusiv compatibilitatea semnăturii Ed25519 a telefonului cu
   verificarea din user-service), build-ul web pentru Netlify și bundle-urile JavaScript pentru Android și iOS.
 - **Android APK** (`android.yml`): build-ul nativ complet, la fiecare schimbare în `client/`; pică dacă modulul Kotlin
-  pentru focus nu a ajuns în APK. Dacă Maven Central sau Google Maven răspund cu 429/5xx, build-ul se reîncearcă o dată după 90 s.
+  pentru focus sau widgetul cu streak-ul (clasa și declarația din manifest) nu au ajuns în APK. Dacă Maven Central sau Google Maven răspund cu 429/5xx, build-ul se reîncearcă o dată după 90 s.

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="streak_widget_label">Streak Whatever</string>
+  <string name="streak_widget_description">Streak-ul tău și dacă ai confirmat ceva azi.</string>
+  <string name="streak_widget_placeholder_label">Streak</string>
+  <string name="streak_widget_open">Deschide Whatever</string>
+</resources>

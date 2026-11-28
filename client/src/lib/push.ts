@@ -1,4 +1,5 @@
 import { cancelStreakReminders } from './reminder';
+import { clearStreakWidget } from './widget';
 
 /**
  * Pe telefon nu există Web Push (iar notificările trimise de server ar cere Firebase): aici aplicația are doar
@@ -27,7 +28,8 @@ export async function refreshPush(language?: string): Promise<void> {
   void language;
 }
 
-/** La deconectare: amintirile programate pentru contul ăsta nu mai au rost. */
+/** La deconectare: amintirile programate și widgetul cu streak-ul nu mai sunt ale nimănui. */
 export async function releaseDevice(): Promise<void> {
+  clearStreakWidget();
   await cancelStreakReminders().catch(() => undefined);
 }

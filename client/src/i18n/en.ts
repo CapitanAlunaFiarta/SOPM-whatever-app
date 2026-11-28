@@ -685,6 +685,11 @@ export const en: Dictionary = {
   'reminder.startBody': 'Confirm an activity today and your streak starts at 1.',
   // Comun
   'common.openSettings': 'Open settings',
+  // Widgetul Android cu streak-ul
+  'widget.zero': 'days in a row',
+  'widget.done': 'Today: done ✓',
+  'widget.pending': 'Today: nothing yet',
+  'widget.start': 'Start a new one today',
   'plural.days': { one: '{count} day', other: '{count} days' },
   'plural.points': { one: '{count} point', other: '{count} points' },
   'plural.accounts': { one: '{count} account', other: '{count} accounts' },
@@ -707,4 +712,5 @@ export const en: Dictionary = {
   'plural.lastWeeks': { one: 'the last week', other: 'the last {count} weeks' },
   'plural.unreadMessages': { one: '{count} new message', other: '{count} new messages' },
   'plural.pushDevices': { one: '{count} subscribed browser', other: '{count} subscribed browsers' },
+  'plural.widgetDays': { one: 'day in a row', other: 'days in a row' },
 };
