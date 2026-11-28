@@ -6,15 +6,16 @@ import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { localDate } from '@/lib/dates';
 import { currentPosition } from '@/lib/location';
-import { useFriends, useSaveTask } from '@/lib/queries';
+import { isFriend, useFriends, useSaveTask } from '@/lib/queries';
 import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_COORDS, PRIORITIES, type Task, type TaskInput } from '@/lib/types';
 
 import { DateField } from './DateField';
 import { LocationPicker } from './LocationPicker';
+import { isValidRadius, RADIUS_MIN, RadiusPicker } from './RadiusPicker';
 import { colors } from './theme';
 import { AppText, Banner, Button, Card, ChipGroup, MultiChipGroup, Row, TextField, ToggleRow } from './ui';
 
-const RADIUS_OPTIONS = ['50', '100', '150', '300', '500', '1000'] as const;
+const RADIUS_OPTIONS = [50, 100, 150, 300, 500, 1000] as const;
 
 function initialInput(task?: Task): TaskInput {
   if (task) {
@@ -60,8 +61,14 @@ export function TaskForm({ task }: { task?: Task }) {
       setError(t('form.titleRequired'));
       return;
     }
+    if (input.requiresLocation && !isValidRadius(input.radius)) {
+      setError(t('form.radiusInvalid'));
+      return;
+    }
+    // Fără locație raza nu contează, dar serverul o vrea validă.
+    const radius = isValidRadius(input.radius) ? input.radius : 150;
     try {
-      await save.mutateAsync({ id: task?.id, input: { ...input, title: input.title.trim() } });
+      await save.mutateAsync({ id: task?.id, input: { ...input, radius, title: input.title.trim() } });
       if (router.canGoBack()) router.back();
       else router.replace('/tasks');
     } catch (e) {
@@ -69,13 +76,11 @@ export function TaskForm({ task }: { task?: Task }) {
     }
   };
 
-  // Prietenii actuali, plus cei deja invitați (chiar dacă între timp nu mai sunteți prieteni).
+  // Prietenii actuali, plus cei deja în activitate (invitați sau intrați din comunitate, chiar dacă nu sunteți prieteni).
   const declined = new Set((task?.participants ?? []).filter((person) => person.status === 'DECLINED').map((person) => person.username));
   const friendOptions = Array.from(new Set([
-    ...(friends.data ?? []).map((friend) => friend.username), ...input.participants, ...declined,
+    ...(friends.data ?? []).filter(isFriend).map((friend) => friend.username), ...input.participants, ...declined,
   ]));
-  const radiusOptions = Array.from(new Set<string>([...RADIUS_OPTIONS, String(input.radius)]))
-    .sort((a, b) => Number(a) - Number(b));
 
   return (
     <View style={{ gap: 14 }}>
@@ -107,7 +112,8 @@ export function TaskForm({ task }: { task?: Task }) {
           }} />
         {input.requiresLocation && (
           <View style={{ gap: 10 }}>
-            <LocationPicker value={{ latitude: input.latitude, longitude: input.longitude }} radius={input.radius}
+            <LocationPicker value={{ latitude: input.latitude, longitude: input.longitude }}
+              radius={isValidRadius(input.radius) ? input.radius : RADIUS_MIN}
               onChange={(value) => setInput((current) => ({ ...current, ...value }))} />
             <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <Text style={{ color: colors.muted, fontSize: 12.5 }}>
@@ -116,7 +122,7 @@ export function TaskForm({ task }: { task?: Task }) {
               <Button compact variant="secondary" title={t('form.myLocation')} icon="locate" loading={locating} onPress={locateMe} />
             </Row>
             <Text style={styles.label}>{t('form.radius')}</Text>
-            <ChipGroup options={radiusOptions} value={String(input.radius)} onChange={(value) => set('radius', Number(value))} />
+            <RadiusPicker presets={RADIUS_OPTIONS} value={input.radius} onChange={(value) => set('radius', value)} />
           </View>
         )}
       </Card>

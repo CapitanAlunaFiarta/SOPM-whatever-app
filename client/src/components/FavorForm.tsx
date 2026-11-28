@@ -11,10 +11,11 @@ import { CATEGORIES, DEFAULT_CATEGORY, DEFAULT_COORDS, type FavorInput } from '@
 
 import { DateField } from './DateField';
 import { LocationPicker } from './LocationPicker';
+import { isValidRadius, RADIUS_MIN, RadiusPicker } from './RadiusPicker';
 import { colors } from './theme';
 import { AppText, Banner, Button, Card, ChipGroup, EmptyState, Row, TextField } from './ui';
 
-const RADIUS_OPTIONS = ['50', '100', '150', '300', '500'] as const;
+const RADIUS_OPTIONS = [50, 100, 150, 300, 500] as const;
 
 /** Cererea unui favor: prietenul, ce să facă, până când și locul unde face poza de confirmare. */
 export function FavorForm({ friend: initialFriend }: { friend?: string }) {
@@ -60,6 +61,10 @@ export function FavorForm({ friend: initialFriend }: { friend?: string }) {
       setError(t('favor.form.title'));
       return;
     }
+    if (!isValidRadius(input.radius)) {
+      setError(t('form.radiusInvalid'));
+      return;
+    }
     try {
       await save.mutateAsync({ ...input, title: input.title.trim(), details: input.details.trim() });
       if (router.canGoBack()) router.back();
@@ -73,7 +78,6 @@ export function FavorForm({ friend: initialFriend }: { friend?: string }) {
     return <Card><EmptyState icon="people-outline" title={t('favor.emptyTitle')} text={t('favor.noFriends')} /></Card>;
   }
 
-  const radiusOptions = Array.from(new Set<string>([...RADIUS_OPTIONS, String(input.radius)])).sort((a, b) => Number(a) - Number(b));
   return (
     <View style={{ gap: 14 }}>
       {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
@@ -97,7 +101,8 @@ export function FavorForm({ friend: initialFriend }: { friend?: string }) {
       <Card>
         <Text style={styles.label}>{t('favor.form.place')}</Text>
         <AppText variant="small">{t('favor.form.placeHint')}</AppText>
-        <LocationPicker value={{ latitude: input.latitude, longitude: input.longitude }} radius={input.radius}
+        <LocationPicker value={{ latitude: input.latitude, longitude: input.longitude }}
+          radius={isValidRadius(input.radius) ? input.radius : RADIUS_MIN}
           onChange={(value) => setInput((current) => ({ ...current, ...value }))} />
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <Text style={{ color: colors.muted, fontSize: 12.5 }}>
@@ -106,7 +111,7 @@ export function FavorForm({ friend: initialFriend }: { friend?: string }) {
           <Button compact variant="secondary" title={t('form.myLocation')} icon="locate" loading={locating} onPress={locateMe} />
         </Row>
         <Text style={styles.label}>{t('form.radius')}</Text>
-        <ChipGroup options={radiusOptions} value={String(input.radius)} onChange={(value) => set('radius', Number(value))} />
+        <RadiusPicker presets={RADIUS_OPTIONS} value={input.radius} onChange={(value) => set('radius', value)} />
       </Card>
       <Button title={t('favor.form.submit')} icon="send" loading={save.isPending} disabled={blocked} onPress={submit} />
     </View>

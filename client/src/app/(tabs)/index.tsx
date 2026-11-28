@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { View } from 'react-native';
 
+import { JoinRequests } from '@/components/JoinRequests';
 import { ProgressRing } from '@/components/ProgressRing';
 import { TaskCard } from '@/components/TaskCard';
 import { AppText, Banner, Button, Card, EmptyState, Row, Screen, StatTile } from '@/components/ui';
@@ -8,7 +9,7 @@ import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { localDate, monthKey } from '@/lib/dates';
-import { useFavors, useMe, useRecap, useTasks } from '@/lib/queries';
+import { useFavors, useFriends, useMe, useRecap, useTasks } from '@/lib/queries';
 import { favorNeedsMe, isMember, type Task } from '@/lib/types';
 
 // De făcut: activități active la care sunt membru și la care nu mi-am făcut încă partea.
@@ -22,9 +23,13 @@ export default function HomeScreen() {
   const recap = useRecap(monthKey());
   const favors = useFavors();
   const favorsWaiting = (favors.data?.favors ?? []).filter(favorNeedsMe).length;
+  const friends = useFriends();
+  const friendRequests = (friends.data ?? []).filter((friend) => friend.status === 'INCOMING').length;
   const current = me.data ?? user;
   const mine = (tasks.data ?? []).filter(isMember);
   const invites = (tasks.data ?? []).filter((task) => task.myStatus === 'INVITED');
+  // Activitățile mele trimise în comunitate la care așteaptă cereri de participare.
+  const withRequests = (tasks.data ?? []).filter((task) => task.isOwner && (task.joinRequests ?? []).length > 0);
   const open = mine.filter(isOpen);
   const overdue = open.filter((task) => task.status === 'Overdue');
   const streak = current?.streak ?? 0;
@@ -76,6 +81,25 @@ export default function HomeScreen() {
             <Button compact title={t('home.openFavors')} icon="hand-left-outline"
               onPress={() => router.push({ pathname: '/social', params: { section: 'favors' } })} />
           </Row>
+        </Card>
+      )}
+
+      {(friendRequests > 0 || withRequests.length > 0) && (
+        <Card>
+          <AppText variant="heading">{t('home.requestsTitle')}</AppText>
+          {friendRequests > 0 && (
+            <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <AppText variant="muted" style={{ flex: 1, minWidth: 160 }}>{tp('plural.friendRequests', friendRequests)}</AppText>
+              <Button compact title={t('home.openFriends')} icon="person-add-outline"
+                onPress={() => router.push({ pathname: '/social', params: { section: 'friends' } })} />
+            </Row>
+          )}
+          {withRequests.map((task) => (
+            <View key={task.id} style={{ gap: 6 }}>
+              <AppText style={{ fontWeight: '800' }}>{task.title}</AppText>
+              <JoinRequests task={task} />
+            </View>
+          ))}
         </Card>
       )}
 

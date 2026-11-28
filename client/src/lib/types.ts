@@ -58,9 +58,17 @@ export type Task = {
   participants: Participant[];
   /** Proprietarul + cei care au acceptat. */
   memberCount: number;
+  /** Câți membri poate avea o activitate (cu tot cu organizator). */
+  maxMembers: number;
   confirmedCount: number;
   chat: TaskChat;
+  /** A fost trimisă în chatul comunității (oricine o vede acolo poate cere să participe). */
+  shared: boolean;
+  /** Cererile de participare din comunitate, fără răspuns (le vede doar organizatorul). */
+  joinRequests: JoinRequest[];
 };
+
+export type JoinRequest = { username: string; fullName: string; requestedAt: string };
 
 export type ParticipantStatus = 'INVITED' | 'ACCEPTED' | 'DECLINED';
 
@@ -114,21 +122,85 @@ export type CompletionResult = {
   freezesLeft: number;
 };
 
+/** Mesajele speciale din chatul comunității: streak arătat, invitație la o activitate, versiune nouă. */
+export type ChatKind = 'TEXT' | 'STREAK' | 'ACTIVITY' | 'UPDATE';
+
+export type StreakPayload = { streak: number; points: number };
+export type ActivityPayload = {
+  taskId: number; title: string; category: Category; dueDate: string; isRecurring: boolean; requiresLocation: boolean;
+};
+export type UpdatePayload = { version: string; build?: number; url?: string };
+
 export type ChatMessage = {
   id: number;
   senderUsername: string;
   senderName: string;
-  senderRole: Role;
+  senderRole: Role | 'SYSTEM';
+  /** Text simplu (și varianta citibilă a mesajelor speciale, pentru aplicațiile vechi). */
   text: string;
   createdAt: string;
+  kind?: ChatKind;
+  payload?: Partial<StreakPayload & ActivityPayload & UpdatePayload> | null;
 };
+
+/** Relația mea cu cineva: prieteni, cerere primită (INCOMING) sau trimisă (OUTGOING). */
+export type FriendStatus = 'FRIEND' | 'INCOMING' | 'OUTGOING';
+export type Relation = FriendStatus | 'NONE' | 'SELF';
 
 export type Friend = {
   username: string;
   fullName: string;
   streak: number;
   points: number;
-  direction: 'incoming' | 'outgoing' | 'mutual';
+  status: FriendStatus;
+  /** Câmp vechi, păstrat de server pentru aplicațiile mai vechi. */
+  direction?: 'incoming' | 'outgoing' | 'mutual';
+};
+
+/** Profilul public al cuiva (fără email). */
+export type Profile = {
+  username: string;
+  fullName: string;
+  role: Role;
+  streak: number;
+  points: number;
+  /** Câte activități (și favoruri) a finalizat. */
+  completed: number;
+  friends: number;
+  memberSince: string | null;
+  lastActiveOn: string | null;
+  relation: Relation;
+};
+
+/** Ce vede oricine din comunitate despre o activitate trimisă acolo. */
+export type ActivityPreview = {
+  id: number;
+  title: string;
+  category: Category;
+  dueDate: string;
+  isRecurring: boolean;
+  requiresLocation: boolean;
+  status: TaskStatus;
+  ownerUsername: string;
+  ownerName: string;
+  memberCount: number;
+  maxMembers: number;
+  full: boolean;
+  myStatus: 'OWNER' | 'MEMBER' | 'INVITED' | 'REQUESTED' | 'DECLINED' | 'NONE';
+  canJoin: boolean;
+};
+
+/** Un chat de activitate din lista de chaturi (Social → Chat). */
+export type ActivityChat = {
+  taskId: number;
+  title: string;
+  category: Category;
+  status: TaskStatus;
+  memberCount: number;
+  messageCount: number;
+  readOnly: boolean;
+  closesAt: string | null;
+  lastMessage: { id: number; text: string; username: string; fullName: string; createdAt: string; mine: boolean } | null;
 };
 
 export type LeaderboardEntry = {

@@ -1,12 +1,14 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { JoinRequests, openProfile } from '@/components/JoinRequests';
 import { colors } from '@/components/theme';
 import { AppText, Banner, Button, Card, EmptyState, Loading, Row, Screen, TextField } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { markSeen, taskChatKey } from '@/lib/chatSeen';
 import { localDate } from '@/lib/dates';
 import { useSendTaskMessage, useTaskMessages, useTasks } from '@/lib/queries';
 
@@ -26,6 +28,12 @@ export default function ActivityChatScreen() {
   const send = useSendTaskMessage(taskId);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const newest = messages.data?.[messages.data.length - 1]?.id;
+
+  // Mesajele afișate aici sunt citite: lista de chaturi nu le mai arată ca noi.
+  useEffect(() => {
+    markSeen(taskChatKey(taskId), newest);
+  }, [taskId, newest]);
 
   if (tasks.isLoading) return <Loading />;
   if (!task) {
@@ -68,17 +76,19 @@ export default function ActivityChatScreen() {
         <AppText variant="heading">{t('group.members')}</AppText>
         {members.map((member) => (
           <Row key={member.username} style={{ justifyContent: 'space-between' }}>
-            <View style={{ flex: 1, gap: 1 }}>
+            <Pressable style={{ flex: 1, gap: 1 }} accessibilityRole="link"
+              accessibilityLabel={t('chat.openProfile', { name: member.fullName })} onPress={() => openProfile(member.username)}>
               <Text style={styles.member} numberOfLines={1}>
                 {member.username === user?.username ? t('leaderboard.you', { name: member.fullName }) : member.fullName}
               </Text>
               <Text style={styles.handle} numberOfLines={1}>
                 @{member.username}{member.owner ? ` · ${t('group.statusOwner')}` : ''}
               </Text>
-            </View>
+            </Pressable>
             <Text style={[styles.status, member.done && { color: colors.green }]}>{member.status}</Text>
           </Row>
         ))}
+        {task.isOwner ? <JoinRequests task={task} /> : null}
       </Card>
 
       {!available ? (
@@ -106,9 +116,12 @@ export default function ActivityChatScreen() {
               {newestFirst.map((message, index) => (
                 <View key={message.id} style={[styles.message, index > 0 && styles.separator]}>
                   <Row style={{ justifyContent: 'space-between' }}>
-                    <Text style={[styles.sender, message.mine && { color: colors.violet }]} numberOfLines={1}>
-                      {message.fullName} <Text style={styles.handle}>@{message.username}</Text>
-                    </Text>
+                    <Pressable style={{ flexShrink: 1 }} accessibilityRole="link"
+                      accessibilityLabel={t('chat.openProfile', { name: message.fullName })} onPress={() => openProfile(message.username)}>
+                      <Text style={[styles.sender, message.mine && { color: colors.violet }]} numberOfLines={1}>
+                        {message.fullName} <Text style={styles.handle}>@{message.username}</Text>
+                      </Text>
+                    </Pressable>
                     <AppText variant="small">{formatTime(message.createdAt)}</AppText>
                   </Row>
                   <AppText>{message.text}</AppText>

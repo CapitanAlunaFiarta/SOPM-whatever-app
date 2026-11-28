@@ -156,7 +156,7 @@ async function confirmTask(title) {
   await taskCard(title).getByRole('button', { name: 'Confirmă', exact: true }).click();
 }
 
-async function createTask(title, { biometrics = false, location = false, category, friends = [] } = {}) {
+async function createTask(title, { biometrics = false, location = false, radius, category, friends = [] } = {}) {
   await page.goto(`${BASE}/task/new`);
   await field('Ce vrei să faci?').fill(title);
   if (category) await button(category).click();
@@ -166,10 +166,35 @@ async function createTask(title, { biometrics = false, location = false, categor
     await visible(page.getByRole('switch', { name: 'Confirmare în locație' })).click();
     // Pinul pornește automat de la locația curentă.
     await seen(`${BRASOV.latitude.toFixed(5)}, ${BRASOV.longitude.toFixed(5)}`);
+    if (radius) {
+      await button('Altă rază').click();
+      await field('Raza în metri').fill(String(radius));
+    }
   }
   await button('Adaugă activitatea').click();
   await page.waitForURL((url) => url.pathname !== '/task/new');
   await taskCard(title).waitFor();
+}
+
+/** Încearcă `check` până trece (o acțiune din pagină ajunge la server după o clipă). */
+async function eventually(check, timeout = 15_000) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    try {
+      return await check();
+    } catch (error) {
+      if (Date.now() > deadline) throw error;
+      await page.waitForTimeout(400);
+    }
+  }
+}
+
+/** Pe Social → Prieteni: acceptă cererea de prietenie primită de la `friend`. */
+async function acceptFriendRequest(friend) {
+  await seen('Cereri primite');
+  await visible(page.locator('div').filter({ hasText: `@${friend.username}` }).filter({ has: button('Acceptă') })).last()
+    .getByRole('button', { name: 'Acceptă', exact: true }).click();
+  await seen(`Acum ești prieten cu @${friend.username}.`);
 }
 
 async function login(email, password) {
@@ -240,8 +265,9 @@ if (ok) {
     });
   }
 
-  await step('activitate cu locație: confirmată la fața locului', async () => {
-    await createTask('Alerg în parc', { location: true, category: 'Activitate fizică / sport' });
+  await step('activitate cu locație (rază aleasă de mână): confirmată la fața locului', async () => {
+    await createTask('Alerg în parc', { location: true, radius: 250, category: 'Activitate fizică / sport' });
+    await taskCard('Alerg în parc').getByText('GPS · 250 m').waitFor();
     const before = dialogs.length;
     await confirmTask('Alerg în parc');
     await expectDialog(before, /Streak: 1 zi · \d+ puncte/);
@@ -283,7 +309,13 @@ if (ok) {
       fullName: 'Bob Prieten', username: `bob_${run}`, email: `bob_${run}@ci.local`, password: 'parola-bob-foarte-sigura-1',
     };
     const { token } = await api('user', '/users/register', { body: friend });
+    // Prietenul trimite o cerere; până nu o accept, nu-l pot invita.
     await api('user', '/friends', { token, body: { username: me.username } });
+    await page.goto(BASE);
+    await waitPath('/');
+    await openTab('Social', '/social');
+    await visible(page.getByRole('tab', { name: 'Prieteni' })).click();
+    await acceptFriendRequest(friend);
     await createTask('Alergăm împreună', { category: 'Activitate fizică / sport', friends: [friend.username] });
     await seen(`@${friend.username} · invitat`);
     const invite = (await api('task', '/tasks', { token })).find((task) => task.title === 'Alergăm împreună');
@@ -315,6 +347,12 @@ if (ok) {
     };
     const { token } = await api('user', '/users/register', { body: friend });
     await api('user', '/friends', { token, body: { username: me.username } });
+    // Cererea de prietenie apare pe Acasă și duce la Social → Prieteni.
+    await page.goto(BASE);
+    await seen('O cerere de prietenie');
+    await button('Vezi cererile').click();
+    await waitPath('/social');
+    await acceptFriendRequest(friend);
     const favor = await api('task', '/favors', { token, body: {
       friend: me.username, title: 'Ridică-mi coletul', details: 'E pe numele meu.', category: 'CHORES', dueDate: tomorrow,
       latitude: BRASOV.latitude, longitude: BRASOV.longitude, radius: 150,
@@ -341,12 +379,66 @@ if (ok) {
     await waitPath('/');
   });
 
-  await step('chat: mesajul apare în listă', async () => {
+  await step('chaturi: comunitatea și chatul activității în listă; mesaj și streak arătat', async () => {
     await openTab('Social', '/social');
+    await visible(page.getByRole('tab', { name: 'Chat' })).click();
+    await seen('Chaturile activităților');
+    await visible(page.getByRole('button', { name: /^Alergăm împreună/ })).first().waitFor();
+    await visible(page.getByRole('button', { name: /^Comunitate/ })).first().click();
+    await waitPath('/chat/community');
     const text = `Salut din testul UI ${run}`;
     await visible(page.getByPlaceholder('Scrie un mesaj pentru comunitate…')).fill(text);
     await button('Trimite').click();
     await seen(text);
+    await button('Arată-ți streak-ul').click();
+    await seen('Streak-ul tău a apărut în chat.');
+    await seen(/^Ana are un streak de \d+ (zi|zile|de zile)!$/);
+  });
+
+  await step('profil din chat: cererea de prietenie trimisă și acceptată', async () => {
+    const stranger = {
+      fullName: 'Dana Străină', username: `dana_${run}`, email: `dana_${run}@ci.local`, password: 'parola-dana-foarte-sigura-1',
+    };
+    const { token } = await api('user', '/users/register', { body: stranger });
+    await api('user', '/chat', { token, body: { text: 'Cine vine la alergare?' } });
+    await page.goto(`${BASE}/chat/community`);
+    await seen('Cine vine la alergare?');
+    await visible(page.getByRole('link', { name: 'Vezi profilul lui Dana Străină' })).first().click();
+    await waitPath(`/user/${stranger.username}`);
+    await seen('Activități finalizate');
+    await button('Adaugă prieten').click();
+    await seen('Cerere de prietenie trimisă');
+    await api('user', `/friends/${me.username}/accept`, { token, body: {} });
+    await page.reload();
+    await seen('Sunteți prieteni');
+  });
+
+  await step('invitație în comunitate: cineva cere să participe, organizatorul aprobă', async () => {
+    await createTask('Tură de bicicletă', { category: 'Activitate fizică / sport' });
+    const from = dialogs.length;
+    await taskCard('Tură de bicicletă', 'Trimite în comunitate')
+      .getByRole('button', { name: 'Trimite în comunitate', exact: true }).click();
+    await expectDialog(from, /Invitația a apărut în chatul comunității/);
+    await page.goto(`${BASE}/chat/community`);
+    await seen('Invitație la o activitate');
+    await seen('Activitatea ta');
+    const joiner = {
+      fullName: 'Eva Comunitate', username: `eva_${run}`, email: `eva_${run}@ci.local`, password: 'parola-eva-foarte-sigura-1',
+    };
+    const { token } = await api('user', '/users/register', { body: joiner });
+    const invite = (await api('user', '/chat', { token }))
+      .find((message) => message.kind === 'ACTIVITY' && message.payload?.title === 'Tură de bicicletă');
+    if (!invite) throw new Error('Invitația nu e în chatul comunității');
+    const asked = await api('task', `/tasks/${invite.payload.taskId}/join`, { token, body: {} });
+    if (asked.myStatus !== 'REQUESTED') throw new Error(`Cererea nu a fost trimisă: ${JSON.stringify(asked)}`);
+    await page.goto(BASE);
+    await seen('Cereri de participare · O cerere de participare');
+    await visible(page.locator('div').filter({ hasText: `@${joiner.username}` }).filter({ has: button('Aprobă') })).last()
+      .getByRole('button', { name: 'Aprobă', exact: true }).click();
+    await eventually(async () => {
+      const tasks = await api('task', '/tasks', { token });
+      if (!tasks.some((task) => task.title === 'Tură de bicicletă' && task.myStatus === 'ACCEPTED')) throw new Error('Nu a devenit membru');
+    });
   });
 
   await step('deconectare și rută protejată', async () => {
