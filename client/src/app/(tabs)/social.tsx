@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Avatar } from '@/components/Avatar';
 import { CATEGORY_ICONS, isCategory } from '@/components/categories';
 import { communityPreview } from '@/components/CommunityMessage';
 import { FavorsSection } from '@/components/FavorsSection';
@@ -235,6 +236,7 @@ function PersonRow({ friend }: { friend: Friend }) {
     <Pressable accessibilityRole="link" accessibilityLabel={t('chat.openProfile', { name: friend.fullName })}
       onPress={() => openProfile(friend.username)}>
       <Row style={{ justifyContent: 'space-between' }}>
+        <Avatar username={friend.username} name={friend.fullName} version={friend.avatarVersion} size={40} />
         <View style={{ flex: 1 }}>
           <AppText variant="heading">{friend.fullName}</AppText>
           <AppText variant="muted">@{friend.username}</AppText>
@@ -269,6 +271,7 @@ function LeaderboardSection() {
               onPress={() => openProfile(entry.username)}
               style={({ pressed }) => [styles.rank, index > 0 && styles.separator, me && styles.me, pressed && { opacity: 0.75 }]}>
               <Text style={[styles.position, index < 3 && { color: colors.amber }]}>{index + 1}</Text>
+              <Avatar username={entry.username} name={entry.fullName} version={entry.avatarVersion} size={34} />
               <View style={{ flex: 1 }}>
                 <AppText style={{ fontWeight: '700' }}>{me ? t('leaderboard.you', { name: entry.fullName }) : entry.fullName}</AppText>
                 <AppText variant="small">@{entry.username} · {tp('plural.points', entry.points)}</AppText>

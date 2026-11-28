@@ -1,8 +1,9 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 
-import { colors } from '@/components/theme';
+import { Avatar } from '@/components/Avatar';
+import { BadgeGrid } from '@/components/BadgeGrid';
 import { AppText, Badge, Banner, Button, Card, EmptyState, Loading, Row, Screen, StatTile } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
@@ -36,7 +37,6 @@ export default function UserProfileScreen() {
       setError(errorMessage(e));
     }
   };
-  const initials = person.fullName.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
 
   return (
     <Screen refreshing={profile.isRefetching} onRefresh={() => profile.refetch()}>
@@ -44,12 +44,13 @@ export default function UserProfileScreen() {
       {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
       <Card>
         <Row gap={14}>
-          <View style={styles.avatar}><Text style={styles.initials}>{initials || '?'}</Text></View>
+          <Avatar username={person.username} name={person.fullName} version={person.avatarVersion} size={64} />
           <View style={{ flex: 1, gap: 2 }}>
             <AppText variant="heading">{person.fullName}</AppText>
             <AppText variant="muted">@{person.username}</AppText>
           </View>
         </Row>
+        {person.bio ? <AppText>{person.bio}</AppText> : null}
         <Row style={{ flexWrap: 'wrap' }} gap={6}>
           {person.role === 'ADMIN' ? <Badge text={t('role.admin')} tone="accent" /> : null}
           {person.memberSince ? (
@@ -66,7 +67,12 @@ export default function UserProfileScreen() {
         <StatTile label={t('stats.streak')} value={`🔥 ${person.streak}`} hint={tp('plural.days', person.streak)} tone="warning" />
         <StatTile label={t('user.completed')} value={person.completed} hint={tp('plural.points', person.points)} tone="success"
           icon="checkmark-done-outline" />
+        {person.bestStreak ? (
+          <StatTile label={t('user.bestStreak')} value={person.bestStreak} hint={tp('plural.days', person.bestStreak)} tone="info"
+            icon="trophy-outline" />
+        ) : null}
       </Row>
+      {person.badges ? <BadgeGrid badges={person.badges} showLocked={false} /> : null}
 
       <Card>
         {person.relation === 'SELF' ? (
@@ -105,11 +111,3 @@ export default function UserProfileScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  avatar: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: `${colors.indigo}33`, borderWidth: 1, borderColor: colors.indigo,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  initials: { color: colors.text, fontSize: 20, fontWeight: '900' },
-});

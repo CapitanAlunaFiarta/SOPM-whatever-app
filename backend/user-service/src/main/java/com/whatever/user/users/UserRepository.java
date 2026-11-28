@@ -75,7 +75,18 @@ public class UserRepository {
         user.put("biometricEnabled", Boolean.TRUE.equals(row.get("biometric_enabled")));
         LocalDate last = localDate(row.get("last_streak_date"));
         user.put("lastActiveOn", last == null ? null : last.toString());
+        user.put("bio", row.get("bio") == null ? "" : row.get("bio"));
+        user.put("avatarVersion", avatarVersion(row.get("avatar_updated_at")));
+        user.put("bestStreak", Math.max(intValue(row.get("best_streak")), effectiveStreak(row)));
         return user;
+    }
+
+    /** Versiunea pozei de profil (momentul în care a fost pusă, în milisecunde); null = fără poză. */
+    public static Long avatarVersion(Object value) {
+        if (value instanceof Timestamp timestamp) return timestamp.getTime();
+        if (value instanceof java.time.OffsetDateTime time) return time.toInstant().toEpochMilli();
+        if (value instanceof java.time.Instant time) return time.toEpochMilli();
+        return null;
     }
 
     public static LocalDate localDate(Object value) {

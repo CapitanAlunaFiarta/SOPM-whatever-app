@@ -48,6 +48,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/health", "/api/health/db", "/error").permitAll()
+                        // Pozele de profil se încarcă direct în <img>/<Image>, fără token (au versiunea în link).
+                        .requestMatchers(HttpMethod.GET, "/api/avatars/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/users/login",
                                 "/api/users/register",

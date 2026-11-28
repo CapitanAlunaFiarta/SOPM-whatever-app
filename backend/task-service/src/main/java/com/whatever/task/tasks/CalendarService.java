@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.sql.Date;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -72,6 +73,32 @@ public class CalendarService {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("month", selected.toString());
         response.put("completions", done);
+        return response;
+    }
+
+    /**
+     * Harta zilelor active (ca pe GitHub): câte finalizări am avut în fiecare zi din ultimele `weeks` săptămâni,
+     * de luni (prima săptămână) până azi. Zilele fără nimic lipsesc din listă. Între 4 și 53 de săptămâni (implicit 26).
+     */
+    public Map<String, Object> activity(AuthUser user, Integer weeks) {
+        int span = weeks == null ? 26 : Math.max(4, Math.min(53, weeks));
+        LocalDate today = LocalDate.now(zone);
+        LocalDate from = today.with(DayOfWeek.MONDAY).minusWeeks(span - 1L);
+        List<Map<String, Object>> days = db.queryForList("SELECT completed_on, count(*) AS total FROM task_completions "
+                        + "WHERE user_email = ? AND completed_on >= ? AND completed_on <= ? GROUP BY completed_on ORDER BY completed_on",
+                user.email(), Date.valueOf(from), Date.valueOf(today)).stream().map(row -> {
+                    Map<String, Object> day = new LinkedHashMap<>();
+                    day.put("date", String.valueOf(TaskService.localDate(row.get("completed_on"))));
+                    day.put("count", TaskService.intValue(row.get("total")));
+                    return day;
+                }).toList();
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("from", from.toString());
+        response.put("to", today.toString());
+        response.put("weeks", span);
+        response.put("activeDays", days.size());
+        response.put("total", days.stream().mapToInt(day -> (Integer) day.get("count")).sum());
+        response.put("days", days);
         return response;
     }
 

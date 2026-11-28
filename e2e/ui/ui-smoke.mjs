@@ -7,7 +7,30 @@
 // pentru codul de resetare când MAIL_PROVIDER=log), ADMIN_EMAIL, ADMIN_PASSWORD, USER_API, TASK_API
 // (prietenul din testul de grup e creat direct prin API).
 import { existsSync, readFileSync } from 'node:fs';
+import { crc32, deflateSync } from 'node:zlib';
 import { chromium } from 'playwright-core';
+
+/** Un PNG RGB de o singură culoare (poza de profil aleasă „din galerie”). */
+function png(width, height, [red, green, blue] = [139, 92, 246]) {
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) raw.set([red, green, blue], y * (width * 3 + 1) + 1 + x * 3);
+  }
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 
 const BASE = process.env.UI_URL || 'http://localhost:5173';
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
@@ -590,6 +613,28 @@ if (ok) {
     const text = await page.evaluate(() => document.body.innerText);
     const points = Number(text.match(/Puncte\s+(\d+)/)?.[1]);
     if (!(points >= 2)) throw new Error(`Puncte afișate: ${points}`);
+  });
+
+  await step('profil: poză din galerie, descriere, insigne; harta zilelor active în recap', async () => {
+    await openTab('Profil', '/profile');
+    // Poza: selectorul de fișiere al browserului primește un PNG făcut aici; aplicația îl decupează pătrat.
+    const chooser = page.waitForEvent('filechooser');
+    await button('Adaugă o poză').click();
+    await (await chooser).setFiles({ name: 'poza.png', mimeType: 'image/png', buffer: png(300, 200) });
+    await button('Schimbă poza').waitFor();
+    const photo = await fetch(`${USER_API}/avatars/${me.username}`);
+    if (photo.status !== 200 || photo.headers.get('content-type') !== 'image/jpeg') throw new Error(`Poza: ${photo.status}`);
+    await button('Adaugă o descriere').click();
+    await field('Despre tine').fill('Alerg dimineața și învăț pentru licență.');
+    await button('Salvează descrierea').click();
+    await seen('Alerg dimineața și învăț pentru licență.');
+    await visible(page.getByRole('button', { name: 'Primul pas: Câștigată', exact: true })).first().waitFor();
+    await visible(page.getByRole('button', { name: /^Centenar: Progres: \d+ din 100$/ })).first().waitFor();
+    await button('Recap lunar').click();
+    await waitPath('/recap');
+    await seen('Zilele tale active');
+    await visible(page.getByRole('button', { name: /· finalizate: [1-9]\d*$/ })).first().waitFor();
+    await button('Închide').click();
   });
 
   const admin = process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD;

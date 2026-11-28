@@ -3,6 +3,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { type ReactNode, useMemo } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Avatar } from '@/components/Avatar';
 import { CATEGORY_ICONS, isCategory } from '@/components/categories';
 import { ActivityJoinState } from '@/components/CommunityMessage';
 import { JoinRequests, openProfile } from '@/components/JoinRequests';
@@ -163,9 +164,10 @@ function TaskDetails({ task }: { task: Task }) {
 
       {people.length > 0 || task.shared ? (
         <Section icon="people-outline" title={t('details.members', { count: task.memberCount, max: task.maxMembers ?? 30 })}>
-          <Person name={task.ownerName} username={task.ownerUsername} note={t('details.organizerShort')} />
+          <Person name={task.ownerName} username={task.ownerUsername} avatar={task.ownerAvatarVersion}
+            note={t('details.organizerShort')} />
           {people.map((person) => (
-            <Person key={person.username} name={person.fullName} username={person.username}
+            <Person key={person.username} name={person.fullName} username={person.username} avatar={person.avatarVersion}
               note={person.status === 'INVITED' ? t('details.invitedShort')
                 : person.confirmed ? t('details.confirmedShort') : t('details.memberShort')}
               confirmed={person.confirmed} />
@@ -190,11 +192,14 @@ function TaskDetails({ task }: { task: Task }) {
   );
 }
 
-function Person({ name, username, note, confirmed }: { name: string; username: string; note: string; confirmed?: boolean }) {
+function Person({ name, username, note, confirmed, avatar }: {
+  name: string; username: string; note: string; confirmed?: boolean; avatar?: number | null;
+}) {
   const { t } = useI18n();
   return (
     <Pressable accessibilityRole="link" accessibilityLabel={t('chat.openProfile', { name })} onPress={() => openProfile(username)}
       style={({ pressed }) => [styles.person, pressed && { opacity: 0.7 }]}>
+      <Avatar username={username} name={name} version={avatar} size={32} />
       <View style={{ flex: 1 }}>
         <Text style={styles.personName} numberOfLines={1}>{name}</Text>
         <Text style={styles.handle} numberOfLines={1}>@{username}</Text>

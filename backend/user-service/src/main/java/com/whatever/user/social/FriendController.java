@@ -1,5 +1,6 @@
 package com.whatever.user.social;
 
+import com.whatever.user.profile.BadgeService;
 import com.whatever.user.security.AuthUser;
 import com.whatever.user.users.UserRepository;
 import com.whatever.user.web.ApiException;
@@ -44,11 +45,13 @@ public class FriendController {
     private final JdbcTemplate db;
     private final UserRepository users;
     private final RateLimiter rateLimiter;
+    private final BadgeService badges;
 
-    public FriendController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter) {
+    public FriendController(JdbcTemplate db, UserRepository users, RateLimiter rateLimiter, BadgeService badges) {
         this.db = db;
         this.users = users;
         this.rateLimiter = rateLimiter;
+        this.badges = badges;
     }
 
     /** Prietenii, cererile primite și cele trimise (status: FRIEND / INCOMING / OUTGOING). */
@@ -56,7 +59,7 @@ public class FriendController {
     public List<Map<String, Object>> friends(@AuthenticationPrincipal AuthUser auth) {
         String me = auth.email();
         return db.queryForList(
-                "SELECT u.username, u.full_name, u.streak, u.last_streak_date, u.points, "
+                "SELECT u.username, u.full_name, u.streak, u.last_streak_date, u.points, u.avatar_updated_at, "
                         + "EXISTS (SELECT 1 FROM friends f WHERE f.status = 'ACCEPTED' AND ("
                         + "  (f.user_email = ? AND f.friend_email = u.email) OR (f.friend_email = ? AND f.user_email = u.email))) AS accepted, "
                         + "EXISTS (SELECT 1 FROM friends f WHERE f.status = 'PENDING' AND f.user_email = u.email "
@@ -73,6 +76,7 @@ public class FriendController {
                     friend.put("fullName", row.get("full_name"));
                     friend.put("streak", users.effectiveStreak(row));
                     friend.put("points", UserRepository.intValue(row.get("points")));
+                    friend.put("avatarVersion", UserRepository.avatarVersion(row.get("avatar_updated_at")));
                     friend.put("status", status);
                     // Pentru aplicațiile mai vechi, care știau doar de direcția adăugării.
                     friend.put("direction", FRIEND.equals(status) ? "mutual" : INCOMING.equals(status) ? "incoming" : "outgoing");
@@ -159,6 +163,11 @@ public class FriendController {
         profile.put("memberSince", since == null ? null : since.toString());
         profile.put("lastActiveOn", last == null ? null : last.toString());
         profile.put("relation", auth.email().equals(email) ? SELF : relation(auth.email(), email));
+        profile.put("bio", row.get("bio") == null ? "" : row.get("bio"));
+        profile.put("avatarVersion", UserRepository.avatarVersion(row.get("avatar_updated_at")));
+        profile.put("bestStreak", Math.max(UserRepository.intValue(row.get("best_streak")), users.effectiveStreak(row)));
+        // Insignele: toate (cu progresul), aplicația le arată pe cele câștigate și, pe profilul meu, și pe celelalte.
+        profile.put("badges", badges.badges(row));
         return profile;
     }
 

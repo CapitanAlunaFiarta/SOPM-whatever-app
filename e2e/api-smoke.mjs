@@ -2,6 +2,29 @@
 // Rulează în CI: node e2e/api-smoke.mjs
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
+import { crc32, deflateSync } from 'node:zlib';
+
+/** Un PNG RGB de o singură culoare, generat aici (pentru poza de profil). */
+function png(width, height, [red, green, blue] = [56, 189, 248]) {
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) raw.set([red, green, blue], y * (width * 3 + 1) + 1 + x * 3);
+  }
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 
 const USER = process.env.USER_API || 'http://localhost:8081/api';
 const TASK = process.env.TASK_API || 'http://localhost:8082/api';
@@ -522,6 +545,51 @@ async function main() {
   const dCancels = await call('DELETE', `${TASK}/tasks/${rid}/join`, { token: tokenD });
   check('nu ai ce retrage după aprobare → 404', dCancels.status === 404, dCancels);
 
+  // --- profil: descriere, poză (recodată de server), insigne, cea mai lungă serie, harta zilelor active
+  const bioSaved = await call('PUT', `${USER}/users/me/profile`, { token: tokenA, body: { bio: '  Alerg dimineața.\n  Învăț seara.  ' } });
+  const bioLong = await call('PUT', `${USER}/users/me/profile`, { token: tokenA, body: { bio: 'x'.repeat(161) } });
+  check('descrierea de pe profil (un singur rând, max. 160)', bioSaved.status === 200 && bioSaved.json?.bio === 'Alerg dimineața. Învăț seara.'
+    && bioLong.status === 400 && /160/.test(bioLong.json?.error || ''), [bioSaved.json?.bio, bioLong.json]);
+  const avatarUp = await call('PUT', `${USER}/users/me/avatar`, { token: tokenA,
+    body: { image: `data:image/png;base64,${png(300, 200).toString('base64')}` } });
+  check('poza de profil se salvează', avatarUp.status === 200 && typeof avatarUp.json?.avatarVersion === 'number', avatarUp.json);
+  const avatarFile = await fetch(`${USER}/avatars/${userA.username}`);
+  const avatarBytes = Buffer.from(await avatarFile.arrayBuffer());
+  check('poza e publică: JPEG mic, fără EXIF, cu cache', avatarFile.status === 200
+    && avatarFile.headers.get('content-type') === 'image/jpeg' && avatarBytes[0] === 0xff && avatarBytes[1] === 0xd8
+    && avatarBytes.length < 40_000 && !avatarBytes.includes(Buffer.from('Exif'))
+    && /public/.test(avatarFile.headers.get('cache-control') || ''), [avatarFile.status, avatarFile.headers.get('content-type'), avatarBytes.length]);
+  const notModified = await fetch(`${USER}/avatars/${userA.username}`, { headers: { 'If-None-Match': avatarFile.headers.get('etag') || '' } });
+  check('poza: 304 când browserul o are deja', notModified.status === 304, notModified.status);
+  const avatarBad = await call('PUT', `${USER}/users/me/avatar`, { token: tokenA, body: { image: Buffer.from('nu e o poză').toString('base64') } });
+  const avatarTiny = await call('PUT', `${USER}/users/me/avatar`, { token: tokenA, body: { image: png(8, 8).toString('base64') } });
+  check('poze invalide → 400', avatarBad.status === 400 && avatarTiny.status === 400, [avatarBad.json, avatarTiny.json]);
+  const profileWithPhoto = await call('GET', `${USER}/profiles/${userA.username}`, { token: tokenB });
+  check('profilul public: poza, descrierea, cea mai lungă serie și 18 insigne', profileWithPhoto.status === 200
+    && profileWithPhoto.json?.avatarVersion === avatarUp.json?.avatarVersion && profileWithPhoto.json?.bio === 'Alerg dimineața. Învăț seara.'
+    && profileWithPhoto.json?.bestStreak >= 1 && profileWithPhoto.json?.badges?.length === 18
+    && profileWithPhoto.json.badges.find((badge) => badge.id === 'FIRST_STEP')?.earned === true
+    && profileWithPhoto.json.badges.find((badge) => badge.id === 'DONE_100')?.earned === false, profileWithPhoto.json);
+  const friendsWithPhoto = await call('GET', `${USER}/friends`, { token: tokenB });
+  const boardWithPhoto = await call('GET', `${USER}/leaderboard`, { token: tokenB });
+  const chatWithPhoto = await call('GET', `${USER}/chat`, { token: tokenB });
+  check('poza apare la prieteni, în clasament și în chat', friendsWithPhoto.json?.find((friend) => friend.username === userA.username)?.avatarVersion
+      === avatarUp.json?.avatarVersion
+    && boardWithPhoto.json?.find((entry) => entry.username === userA.username)?.avatarVersion === avatarUp.json?.avatarVersion
+    && chatWithPhoto.json?.find((message) => message.senderUsername === userA.username)?.senderAvatar === avatarUp.json?.avatarVersion,
+    [friendsWithPhoto.json, chatWithPhoto.json?.[0]]);
+  const meWithBest = await call('GET', `${USER}/users/me`, { token: tokenA });
+  check('cea mai lungă serie e salvată', meWithBest.json?.bestStreak >= meWithBest.json?.streak && meWithBest.json?.bestStreak >= 1, meWithBest.json);
+  const heatmap = await call('GET', `${TASK}/tasks/calendar/activity?weeks=8`, { token: tokenA });
+  const heatMax = await call('GET', `${TASK}/tasks/calendar/activity?weeks=1000`, { token: tokenA });
+  check('harta zilelor active: de luni, până azi, cu ziua de azi', heatmap.status === 200 && heatmap.json?.weeks === 8
+    && new Date(`${heatmap.json.from}T12:00:00Z`).getUTCDay() === 1 && heatmap.json.to === today
+    && heatmap.json.days?.some((day) => day.date === today && day.count >= 1) && heatmap.json.activeDays >= 1
+    && heatMax.json?.weeks === 53, [heatmap.json, heatMax.json?.weeks]);
+  const avatarGone = await call('DELETE', `${USER}/users/me/avatar`, { token: tokenA });
+  const avatarMissing = await fetch(`${USER}/avatars/${userA.username}`);
+  check('poza se poate scoate', avatarGone.status === 200 && avatarGone.json?.avatarVersion === null && avatarMissing.status === 404, avatarGone.json);
+
   // --- freeze
   const overdue = await call('POST', `${TASK}/tasks`, { token: tokenA, body: baseTask({ title: 'Restant', dueDate: yesterday }) });
   check('task cu scadență ieri apare Overdue', overdue.json?.status === 'Overdue', overdue.json);
@@ -568,6 +636,16 @@ async function main() {
   const bonus = await call('POST', `${USER}/admin/users/${encodeURIComponent(userB.email)}/bonus-streak`, { token: adminLogin.json?.token });
   const meB = await call('GET', `${USER}/users/me`, { token: tokenB });
   check('bonus streak +5', bonus.status === 200 && meB.json?.streak === (beforeBonus.json?.streak ?? 0) + 5, meB.json);
+  check('bonus streak: și recordul crește', meB.json?.bestStreak >= meB.json?.streak, meB.json);
+  // Moderare: adminul scoate poza și descrierea cuiva.
+  await call('PUT', `${USER}/users/me/profile`, { token: tokenC, body: { bio: 'Descriere de moderat' } });
+  await call('PUT', `${USER}/users/me/avatar`, { token: tokenC, body: { image: png(64, 64, [200, 30, 30]).toString('base64') } });
+  const clearByUser = await call('POST', `${USER}/admin/users/${encodeURIComponent(userC.email)}/clear-profile`, { token: tokenA });
+  const cleared = await call('POST', `${USER}/admin/users/${encodeURIComponent(userC.email)}/clear-profile`, { token: adminLogin.json?.token });
+  const meC = await call('GET', `${USER}/users/me`, { token: tokenC });
+  const avatarC = await fetch(`${USER}/avatars/${userC.username}`);
+  check('admin scoate poza și descrierea (doar adminul)', clearByUser.status === 403 && cleared.status === 200 && meC.json?.bio === ''
+    && meC.json?.avatarVersion === null && avatarC.status === 404, [clearByUser.status, cleared.status, meC.json]);
 
   // --- versiuni noi ale aplicației: serverul vede release-ul (GitHub simulat) și îl anunță o singură dată în chat
   const releases = process.env.RELEASES_STUB || 'http://localhost:8099';

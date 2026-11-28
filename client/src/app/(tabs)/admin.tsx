@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 
 import { colors } from '@/components/theme';
+import { Avatar } from '@/components/Avatar';
 import { AppText, Badge, Banner, Button, Card, EmptyState, Row, Screen, TextField } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
@@ -27,9 +28,11 @@ export default function AdminScreen() {
     return <Screen title={t('tabs.admin')}><Card><EmptyState icon="lock-closed-outline" title={t('admin.forbidden')} /></Card></Screen>;
   }
 
-  const run = async (target: AdminUser, kind: 'bonus-streak' | 'reset-freezes' | 'delete') => {
+  const run = async (target: AdminUser, kind: 'bonus-streak' | 'reset-freezes' | 'delete' | 'clear-profile') => {
     if (kind === 'delete' && !(await confirmAction(t('admin.deleteTitle'),
       t('admin.deleteText', { name: target.fullName, username: target.username }), t('common.delete')))) return;
+    if (kind === 'clear-profile' && !(await confirmAction(t('admin.clearProfileTitle'),
+      t('admin.clearProfileText', { name: target.fullName }), t('admin.clearProfile')))) return;
     setError(null);
     try {
       await action.mutateAsync({ email: target.email, action: kind });
@@ -46,12 +49,14 @@ export default function AdminScreen() {
       {visible.map((item) => (
         <Card key={item.id}>
           <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Avatar username={item.username} name={item.fullName} version={item.avatarVersion} size={40} />
             <View style={{ flex: 1 }}>
               <AppText variant="heading">{item.fullName}</AppText>
               <AppText variant="muted">@{item.username} · {item.email}</AppText>
             </View>
             <Badge text={item.role === 'ADMIN' ? t('role.admin') : t('role.user')} tone={item.role === 'ADMIN' ? 'accent' : 'neutral'} />
           </Row>
+          {item.bio ? <AppText variant="small">„{item.bio}”</AppText> : null}
           <AppText variant="small">
             {t('admin.stats', {
               streak: item.streak, points: item.points, freezes: item.freezesLeft,
@@ -64,6 +69,10 @@ export default function AdminScreen() {
             {item.email !== user?.email && (
               <>
                 <Button compact variant="secondary" title={t('admin.newPassword')} icon="key-outline" onPress={() => setPasswordFor(item)} />
+                {item.avatarVersion || item.bio ? (
+                  <Button compact variant="secondary" title={t('admin.clearProfile')} icon="image-outline"
+                    onPress={() => run(item, 'clear-profile')} />
+                ) : null}
                 <Button compact variant="ghost" title={t('admin.deleteAccount')} icon="trash-outline" onPress={() => run(item, 'delete')} />
               </>
             )}

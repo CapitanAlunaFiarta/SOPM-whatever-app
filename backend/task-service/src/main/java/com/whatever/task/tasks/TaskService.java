@@ -45,8 +45,8 @@ import java.util.Set;
  */
 @Service
 public class TaskService {
-    private static final String TASK_SELECT = "SELECT t.*, o.username AS owner_username, o.full_name AS owner_name "
-            + "FROM tasks t JOIN users o ON o.email = t.owner_email ";
+    private static final String TASK_SELECT = "SELECT t.*, o.username AS owner_username, o.full_name AS owner_name, "
+            + "o.avatar_updated_at AS owner_avatar FROM tasks t JOIN users o ON o.email = t.owner_email ";
     /** Membrii unei activități: proprietarul și cei care au acceptat invitația. */
     private static final String MEMBERS = "SELECT owner_email AS email FROM tasks WHERE id = ? "
             + "UNION SELECT user_email FROM task_participants WHERE task_id = ? AND status = 'ACCEPTED'";
@@ -256,9 +256,9 @@ public class TaskService {
         int freezes = TaskRules.availableFreezes(intValue(account.get("streak_freezes_left")),
                 localDate(account.get("freeze_month")), today);
         int points = intValue(account.get("points")) + 1;
-        db.update("UPDATE users SET streak = ?, last_streak_date = ?, points = ?, streak_freezes_left = ?, freeze_month = ? "
-                        + "WHERE email = ?",
-                streak, Date.valueOf(today), points, freezes, Date.valueOf(today.withDayOfMonth(1)), email);
+        db.update("UPDATE users SET streak = ?, best_streak = GREATEST(best_streak, ?), last_streak_date = ?, points = ?, "
+                        + "streak_freezes_left = ?, freeze_month = ? WHERE email = ?",
+                streak, streak, Date.valueOf(today), points, freezes, Date.valueOf(today.withDayOfMonth(1)), email);
         Map<String, Integer> result = new LinkedHashMap<>();
         result.put("streak", streak);
         result.put("points", points);
@@ -270,7 +270,7 @@ public class TaskService {
     public List<Map<String, Object>> messages(AuthUser user, long id) {
         requireMember(findRow(id), user);
         List<Map<String, Object>> rows = new ArrayList<>(db.queryForList("SELECT m.id, m.body, m.created_at, m.sender_email, "
-                + "u.username, u.full_name FROM task_messages m JOIN users u ON u.email = m.sender_email "
+                + "u.username, u.full_name, u.avatar_updated_at FROM task_messages m JOIN users u ON u.email = m.sender_email "
                 + "WHERE m.task_id = ? ORDER BY m.id DESC LIMIT 200", id));
         Collections.reverse(rows);
         return rows.stream().map(row -> message(row, user)).toList();
@@ -293,8 +293,8 @@ public class TaskService {
         if (body.isEmpty()) throw new ApiException(400, "Mesajul nu poate fi gol.");
         Long messageId = db.queryForObject("INSERT INTO task_messages(task_id, sender_email, body) VALUES (?, ?, ?) RETURNING id",
                 Long.class, id, user.email(), body);
-        return message(db.queryForMap("SELECT m.id, m.body, m.created_at, m.sender_email, u.username, u.full_name "
-                + "FROM task_messages m JOIN users u ON u.email = m.sender_email WHERE m.id = ?", messageId), user);
+        return message(db.queryForMap("SELECT m.id, m.body, m.created_at, m.sender_email, u.username, u.full_name, "
+                + "u.avatar_updated_at FROM task_messages m JOIN users u ON u.email = m.sender_email WHERE m.id = ?", messageId), user);
     }
 
     /**
@@ -439,6 +439,7 @@ public class TaskService {
             preview.put("status", status);
             preview.put("ownerUsername", row.get("owner_username"));
             preview.put("ownerName", row.get("owner_name"));
+            preview.put("ownerAvatarVersion", avatarVersion(row.get("owner_avatar")));
             preview.put("memberCount", 1 + accepted.getOrDefault(id, 0));
             preview.put("maxMembers", TaskRules.MAX_MEMBERS);
             preview.put("full", full);
@@ -699,7 +700,7 @@ public class TaskService {
         String in = String.join(",", Collections.nCopies(ids.length, "?"));
 
         Map<Long, List<Map<String, Object>>> participants = new HashMap<>();
-        db.queryForList("SELECT p.task_id, p.user_email, p.status, u.username, u.full_name FROM task_participants p "
+        db.queryForList("SELECT p.task_id, p.user_email, p.status, u.username, u.full_name, u.avatar_updated_at FROM task_participants p "
                         + "JOIN users u ON u.email = p.user_email WHERE p.task_id IN (" + in + ") ORDER BY p.invited_at, u.username",
                 ids).forEach(row -> participants.computeIfAbsent(longValue(row.get("task_id")), key -> new ArrayList<>()).add(row));
         Map<Long, Map<String, LocalDate>> lastDone = new HashMap<>();
@@ -765,6 +766,7 @@ public class TaskService {
             person.put("fullName", participant.get("full_name"));
             person.put("status", participantStatus);
             person.put("confirmed", done);
+            person.put("avatarVersion", avatarVersion(participant.get("avatar_updated_at")));
             people.add(person);
         }
         boolean member = isOwner || "ACCEPTED".equals(myStatus);
@@ -800,6 +802,7 @@ public class TaskService {
         task.put("isOwner", isOwner);
         task.put("ownerUsername", row.get("owner_username"));
         task.put("ownerName", row.get("owner_name"));
+        task.put("ownerAvatarVersion", avatarVersion(row.get("owner_avatar")));
         task.put("lastCompletedOn", myLast == null ? null : myLast.toString());
         task.put("completedToday", today.equals(myLast));
         task.put("myStatus", myStatus);
@@ -822,7 +825,14 @@ public class TaskService {
         message.put("username", row.get("username"));
         message.put("fullName", row.get("full_name"));
         message.put("mine", user.email().equals(row.get("sender_email")));
+        message.put("avatarVersion", avatarVersion(row.get("avatar_updated_at")));
         return message;
+    }
+
+    /** Versiunea pozei de profil (milisecunde); null = fără poză. Aplicația încarcă poza de la user-service. */
+    static Long avatarVersion(Object value) {
+        Instant at = instant(value);
+        return at == null ? null : at.toEpochMilli();
     }
 
     private static SqlParameterValue dateParam(LocalDate value) {

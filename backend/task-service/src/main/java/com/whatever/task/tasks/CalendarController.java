@@ -30,6 +30,12 @@ public class CalendarController {
         return calendar.month(user, month);
     }
 
+    /** Harta zilelor active (recap): câte finalizări în fiecare zi din ultimele `weeks` săptămâni. */
+    @GetMapping("/activity")
+    public Map<String, Object> activity(@AuthenticationPrincipal AuthUser user, @RequestParam(required = false) Integer weeks) {
+        return calendar.activity(user, weeks);
+    }
+
     /** Tokenul pentru linkul de abonare (Google Calendar și altele). */
     @GetMapping("/link")
     public Map<String, Object> link(@AuthenticationPrincipal AuthUser user) {

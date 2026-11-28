@@ -8,7 +8,7 @@ import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
 import type {
-  ActivityChat, ActivityPreview, AdminUser, CalendarLink, CalendarMonth, ChatMessage, CompletionResult, Favor, FavorInput, FavorList,
+  ActivityChat, ActivityDays, ActivityPreview, AdminUser, CalendarLink, CalendarMonth, ChatMessage, CompletionResult, Favor, FavorInput, FavorList,
   Friend, FriendStatus, LeaderboardEntry, Profile, Recap, Session, Task, TaskInput, TaskMessage, User,
 } from './types';
 
@@ -30,6 +30,7 @@ export const keys = {
   appVersion: ['app-version'] as const,
   calendar: ['calendar'] as const,
   calendarLink: ['calendar-link'] as const,
+  activityDays: ['activity-days'] as const,
 };
 
 export function useMe() {
@@ -71,6 +72,51 @@ export function useCalendarMonth(month: string) {
     queryKey: [...keys.calendar, month],
     enabled: status === 'signedIn',
     queryFn: () => request<CalendarMonth>('task', `/tasks/calendar?month=${encodeURIComponent(month)}`),
+  });
+}
+
+/** Harta zilelor active (recap): câte finalizări în fiecare zi din ultimele `weeks` săptămâni. */
+export function useActivityDays(weeks = 26) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: [...keys.activityDays, weeks],
+    enabled: status === 'signedIn',
+    queryFn: () => request<ActivityDays>('task', `/tasks/calendar/activity?weeks=${weeks}`),
+  });
+}
+
+/** După o schimbare de profil: eu, profilul public, prietenii și clasamentul (unde apar poza și descrierea). */
+function useRefreshProfile() {
+  const client = useQueryClient();
+  const { updateUser } = useAuth();
+  return (user: User) => {
+    updateUser(user);
+    client.setQueryData(keys.me, user);
+    return Promise.all([
+      client.invalidateQueries({ queryKey: keys.profiles }),
+      client.invalidateQueries({ queryKey: keys.leaderboard }),
+      client.invalidateQueries({ queryKey: keys.chat }),
+    ]);
+  };
+}
+
+/** Descrierea scurtă de pe profil. */
+export function useUpdateBio() {
+  const refresh = useRefreshProfile();
+  return useMutation({
+    mutationFn: (bio: string) => request<User>('user', '/users/me/profile', { method: 'PUT', body: { bio } }),
+    onSuccess: refresh,
+  });
+}
+
+/** Poza de profil: JPEG în base64 (serverul o recodează la 256×256); null = scoate poza. */
+export function useAvatar() {
+  const refresh = useRefreshProfile();
+  return useMutation({
+    mutationFn: (image: string | null) => image
+      ? request<User>('user', '/users/me/avatar', { method: 'PUT', body: { image } })
+      : request<User>('user', '/users/me/avatar', { method: 'DELETE' }),
+    onSuccess: refresh,
   });
 }
 
@@ -410,7 +456,7 @@ export function useAdminAction() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ email, action, newPassword }: {
-      email: string; action: 'bonus-streak' | 'reset-freezes' | 'password' | 'delete'; newPassword?: string;
+      email: string; action: 'bonus-streak' | 'reset-freezes' | 'password' | 'delete' | 'clear-profile'; newPassword?: string;
     }) => {
       const path = `/admin/users/${encodeURIComponent(email)}`;
       if (action === 'delete') return request('user', path, { method: 'DELETE' });
