@@ -14,6 +14,8 @@ const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const USER_LOG = process.env.USER_LOG || '';
 const USER_API = process.env.USER_API || 'http://localhost:8081/api';
 const TASK_API = process.env.TASK_API || 'http://localhost:8082/api';
+// GitHub Releases simulat (e2e/releases-stub.mjs), pornit în CI lângă servicii.
+const RELEASES = process.env.RELEASES_STUB || 'http://localhost:8099';
 const run = Date.now().toString(36);
 const me = {
   fullName: 'Ana Testescu',
@@ -440,6 +442,24 @@ if (ok) {
       if (!tasks.some((task) => task.title === 'Tură de bicicletă' && task.myStatus === 'ACCEPTED')) throw new Error('Nu a devenit membru');
     });
   });
+
+  if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+    await step('versiune nouă: anunț roșu în chat și butonul de update din Profil', async () => {
+      const admin = await api('user', '/users/login', { body: { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD } });
+      // Două versiuni la rând: prima verificare poate doar nota versiunea curentă, a doua e sigur „nouă”.
+      for (const tag of ['android-v9.8.0-98', 'android-v9.9.0-99']) {
+        await fetch(`${RELEASES}/__set`, { method: 'POST', body: JSON.stringify({ tag }) });
+        await api('user', '/admin/releases/check', { token: admin.token, body: {} });
+      }
+      await page.goto(`${BASE}/chat/community`);
+      await seen('Există un nou update: versiunea 9.9.0');
+      await button('Actualizează').waitFor();
+      await page.goto(`${BASE}/profile`);
+      await seen(/^Ai versiunea \d+\.\d+\.\d+$/);
+      await seen('Versiune nouă disponibilă: 9.9.0');
+      await button('Reîncarcă aplicația').waitFor();
+    });
+  }
 
   await step('deconectare și rută protejată', async () => {
     await logout();

@@ -480,6 +480,27 @@ async function main() {
   const meB = await call('GET', `${USER}/users/me`, { token: tokenB });
   check('bonus streak +5', bonus.status === 200 && meB.json?.streak === (beforeBonus.json?.streak ?? 0) + 5, meB.json);
 
+  // --- versiuni noi ale aplicației: serverul vede release-ul (GitHub simulat) și îl anunță o singură dată în chat
+  const releases = process.env.RELEASES_STUB || 'http://localhost:8099';
+  const setRelease = (tag) => fetch(`${releases}/__set`, { method: 'POST', body: JSON.stringify({ tag }) });
+  const updates = async () => ((await call('GET', `${USER}/chat`, { token: tokenB })).json || []).filter((m) => m.kind === 'UPDATE');
+  await setRelease('android-v2.3.0-17');
+  const baseline = await call('POST', `${USER}/admin/releases/check`, { token: adminLogin.json?.token });
+  check('versiuni: prima verificare doar notează versiunea curentă', baseline.status === 200 && baseline.json?.version === '2.3.0'
+    && baseline.json?.build === 17 && (await updates()).length === 0, baseline.json);
+  await setRelease('android-v2.4.0-18');
+  await call('POST', `${USER}/admin/releases/check`, { token: adminLogin.json?.token });
+  await call('POST', `${USER}/admin/releases/check`, { token: adminLogin.json?.token });
+  const announced = await updates();
+  check('versiune nouă → un singur mesaj de la Whatever în chat', announced.length === 1 && announced[0].senderRole === 'SYSTEM'
+    && announced[0].payload?.version === '2.4.0' && announced[0].payload?.build === 18
+    && announced[0].payload?.url?.endsWith('/releases/download/android-v2.4.0-18/whatever.apk'), announced);
+  const latestVersion = await call('GET', `${USER}/app/version`, { token: tokenC });
+  check('GET /app/version: cea mai nouă versiune', latestVersion.status === 200 && latestVersion.json?.version === '2.4.0'
+    && latestVersion.json?.build === 18, latestVersion.json);
+  const userCheck = await call('POST', `${USER}/admin/releases/check`, { token: tokenA });
+  check('verificarea forțată e doar pentru admin', userCheck.status === 403, userCheck.status);
+
   // --- resetare parolă (MAIL_PROVIDER=log în CI)
   const resetRequest = await call('POST', `${USER}/users/password-reset/request`, { body: { email: userC.email, username: userC.username } });
   check('cerere resetare', resetRequest.status === 200, resetRequest);

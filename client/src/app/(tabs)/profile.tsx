@@ -7,10 +7,11 @@ import { LanguagePicker } from '@/components/LanguagePicker';
 import { AppText, Badge, Banner, Button, Card, Row, Screen, StatTile, TextField } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
+import { appBuild, appVersion, isNewerRelease, startUpdate, updateKind } from '@/lib/appVersion';
 import { useAuth } from '@/lib/auth';
 import { disableBiometrics, enableBiometrics, getBiometricStatus } from '@/lib/biometrics';
 import { confirmAction } from '@/lib/dialogs';
-import { useChangePassword, useMe } from '@/lib/queries';
+import { useChangePassword, useLatestRelease, useMe } from '@/lib/queries';
 
 export default function ProfileScreen() {
   const { t, tp, formatDate } = useI18n();
@@ -44,6 +45,7 @@ export default function ProfileScreen() {
       </Card>
       <BiometricsCard userId={current.id} />
       <PasswordCard />
+      <UpdateCard />
       <Button variant="secondary" title={t('common.signOut')} icon="log-out-outline" onPress={async () => {
         if (await confirmAction(t('profile.signOutTitle'), t('profile.signOutText'), t('profile.signOutConfirm'))) await signOut();
       }} />
@@ -101,6 +103,43 @@ function BiometricsCard({ userId }: { userId: number }) {
           {status.data?.label ? <AppText variant="small">{status.data.label}</AppText> : null}
         </View>
       )}
+    </Card>
+  );
+}
+
+/** Versiunea instalată și, dacă a apărut una nouă, butonul de actualizare (APK pe Android, reîncărcare pe web). */
+function UpdateCard() {
+  const { t } = useI18n();
+  const latest = useLatestRelease();
+  const release = latest.data;
+  const newer = isNewerRelease(release);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Card>
+      <AppText variant="heading">{t('update.title')}</AppText>
+      <AppText variant="muted">
+        {appBuild > 0 ? t('update.currentBuild', { version: appVersion, build: appBuild }) : t('update.current', { version: appVersion })}
+      </AppText>
+      {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
+      {latest.error ? <Banner tone="info" text={t('update.unknown')} />
+        : newer && release?.version ? (
+          <View style={{ gap: 8 }}>
+            <Badge text={t('update.available', { version: release.version })} tone="danger" icon="arrow-up-circle" />
+            {updateKind === 'download' ? (
+              <>
+                <Button title={t('update.download')} icon="download-outline" onPress={() => {
+                  startUpdate(release.url).catch((e) => setError(errorMessage(e)));
+                }} />
+                <AppText variant="small">{t('update.downloadHint')}</AppText>
+              </>
+            ) : updateKind === 'reload' ? (
+              <Button title={t('update.reload')} icon="refresh" onPress={() => { void startUpdate(null); }} />
+            ) : <AppText variant="small">{t('update.iosHint')}</AppText>}
+          </View>
+        ) : release?.version ? <Badge text={t('update.latest')} tone="success" icon="checkmark-circle" /> : null}
+      <Button compact variant="ghost" title={t('update.check')} icon="refresh" loading={latest.isFetching}
+        onPress={() => { void latest.refetch(); }} />
     </Card>
   );
 }

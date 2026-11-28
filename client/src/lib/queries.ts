@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { translate } from '../i18n/core';
 
 import { request, saveSession } from './api';
+import type { Release } from './appVersion';
 import { useAuth } from './auth';
 import { biometricTokenForTask } from './biometrics';
 import { currentPosition } from './location';
@@ -26,6 +27,7 @@ export const keys = {
   profile: (username: string) => ['profile', username] as const,
   activityChats: ['activity-chats'] as const,
   previews: ['activity-previews'] as const,
+  appVersion: ['app-version'] as const,
 };
 
 export function useMe() {
@@ -92,6 +94,17 @@ export function useProfile(username: string) {
     queryKey: keys.profile(username),
     enabled: status === 'signedIn' && Boolean(username),
     queryFn: () => request<Profile>('user', `/profiles/${encodeURIComponent(username)}`),
+  });
+}
+
+/** Cea mai nouă versiune publicată a aplicației (o verifică serverul pe GitHub Releases). */
+export function useLatestRelease() {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: keys.appVersion,
+    enabled: status === 'signedIn',
+    staleTime: 10 * 60_000,
+    queryFn: () => request<Release>('user', '/app/version'),
   });
 }
 

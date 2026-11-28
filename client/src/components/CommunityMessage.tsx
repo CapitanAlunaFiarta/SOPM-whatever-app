@@ -5,8 +5,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
+import { compareVersions, isNewerRelease, startUpdate, updateKind } from '@/lib/appVersion';
 import { confirmAction, showMessage } from '@/lib/dialogs';
-import { useJoinActivity } from '@/lib/queries';
+import { useJoinActivity, useLatestRelease } from '@/lib/queries';
 import type { ActivityPayload, ActivityPreview, ChatMessage } from '@/lib/types';
 
 import { CATEGORY_ICONS, isCategory } from './categories';
@@ -57,11 +58,38 @@ export function CommunityMessage({ message, preview, previewsLoading, canDelete,
           <ActivityInviteCard payload={message.payload as ActivityPayload} preview={preview} loading={previewsLoading}
             ownerName={message.senderName} />
         ) : message.kind === 'UPDATE' && message.payload?.version ? (
-          <View style={styles.update}>
-            <Ionicons name="arrow-up-circle" size={20} color={colors.red} />
-            <Text style={styles.updateText}>{t('chats.updatePreview', { version: message.payload.version })}</Text>
-          </View>
+          <UpdateBody version={message.payload.version} build={Number(message.payload.build ?? 0)} url={message.payload.url} />
         ) : <AppText>{message.text}</AppText>}
+    </View>
+  );
+}
+
+/**
+ * Anunțul roșu al botului „Whatever”: versiune nouă, cu butonul de actualizare dacă nu o ai deja.
+ * Butonul instalează mereu cea mai nouă versiune (un anunț mai vechi nu trimite la un APK depășit).
+ */
+function UpdateBody({ version, build, url }: { version: string; build: number; url?: string }) {
+  const { t } = useI18n();
+  const latest = useLatestRelease().data;
+  const newest = latest?.version && (compareVersions(latest.version, version) > 0
+    || (compareVersions(latest.version, version) === 0 && (latest.build ?? 0) > build))
+    ? { version: latest.version, build: latest.build ?? 0, url: latest.url ?? url } : { version, build, url };
+  const newer = isNewerRelease(newest);
+  return (
+    <View style={styles.update}>
+      <Row gap={10}>
+        <Ionicons name="alert-circle" size={22} color={colors.red} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.updateText}>{t('update.chatTitle', { version })}</Text>
+          {build > 0 ? <AppText variant="small">{t('update.chatBuild', { build })}</AppText> : null}
+        </View>
+      </Row>
+      {newest.version !== version ? <AppText variant="small">{t('update.newestIs', { version: newest.version })}</AppText> : null}
+      {!newer ? <AppText variant="small">{t('update.chatHave')}</AppText>
+        : updateKind === 'none' ? <AppText variant="small">{t('update.iosHint')}</AppText> : (
+          <Button compact variant="danger" icon={updateKind === 'download' ? 'download-outline' : 'refresh'} title={t('update.update')}
+            onPress={() => { startUpdate(newest.url).catch((error) => showMessage(t('card.actionFailed'), errorMessage(error))); }} />
+        )}
     </View>
   );
 }
@@ -178,8 +206,7 @@ const styles = StyleSheet.create({
   inviteIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   inviteTitle: { color: colors.text, fontWeight: '800', fontSize: 15.5 },
   update: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.md,
-    backgroundColor: `${colors.red}1F`, borderWidth: 1, borderColor: `${colors.red}88`,
+    gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: `${colors.red}1F`, borderWidth: 1, borderColor: `${colors.red}AA`,
   },
-  updateText: { color: colors.text, fontWeight: '800', flex: 1 },
+  updateText: { color: colors.red, fontWeight: '900', fontSize: 15.5 },
 });
