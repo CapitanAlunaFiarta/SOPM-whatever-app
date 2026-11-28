@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { confirmAction, showMessage } from '@/lib/dialogs';
+import { focusAvailable } from '@/lib/focus';
 import { useCompleteTask, useInviteResponse, useTaskAction } from '@/lib/queries';
 import { isMember, type Task } from '@/lib/types';
 
@@ -116,6 +117,9 @@ export function TaskCard({ task, compact }: { task: Task; compact?: boolean }) {
         <View style={styles.actions}>
           {canComplete && (
             <Button compact title={t('card.confirm')} icon="checkmark-circle" loading={complete.isPending} onPress={onComplete} />
+          )}
+          {focusAvailable && canComplete && !compact && (
+            <Button compact variant="secondary" title={t('focus.button')} icon="leaf-outline" onPress={() => router.push(`/focus/${task.id}`)} />
           )}
           {task.chat?.available && !compact && (
             <Button compact variant="secondary" icon="chatbubbles-outline" onPress={() => router.push(`/chat/${task.id}`)}

@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+  <!-- Istoricul de utilizare (ce aplicație a fost deschisă și când). Se acordă din Setări → Acces la datele de utilizare. -->
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+  <!-- Android 11+: lista aplicațiilor din meniul de aplicații, ca utilizatorul să le aleagă pe cele care îl distrag. -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
+  </queries>
+</manifest>
