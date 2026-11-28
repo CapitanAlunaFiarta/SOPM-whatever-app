@@ -2,12 +2,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { ActivityHeatmap } from '@/components/ActivityHeatmap';
 import { CATEGORY_ICONS } from '@/components/categories';
 import { colors } from '@/components/theme';
 import { AppText, Banner, Card, EmptyState, IconButton, Loading, Row, Screen } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { monthKey, shiftMonth } from '@/lib/dates';
+import { useAuth } from '@/lib/auth';
 import { useRecap } from '@/lib/queries';
 import { CATEGORIES } from '@/lib/types';
 
@@ -20,6 +22,7 @@ export default function RecapScreen() {
   const thisMonth = monthKey();
   const [month, setMonth] = useState(thisMonth);
   const recap = useRecap(month);
+  const { user } = useAuth();
   const data = recap.data?.month === month ? recap.data : undefined;
 
   const rows = data
@@ -84,6 +87,7 @@ export default function RecapScreen() {
           )}
         </>
       )}
+      <ActivityHeatmap bestStreak={user?.bestStreak} />
     </Screen>
   );
 }

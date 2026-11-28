@@ -64,9 +64,18 @@ public class AdminController {
         LocalDate yesterday = users.today().minusDays(1);
         LocalDate last = UserRepository.localDate(user.get("last_streak_date"));
         LocalDate keepAlive = last != null && !last.isBefore(yesterday) ? last : yesterday;
-        db.update("UPDATE users SET streak = ?, last_streak_date = ? WHERE email = ?",
-                users.effectiveStreak(user) + 5, Date.valueOf(keepAlive), user.get("email"));
+        int streak = users.effectiveStreak(user) + 5;
+        db.update("UPDATE users SET streak = ?, best_streak = GREATEST(best_streak, ?), last_streak_date = ? WHERE email = ?",
+                streak, streak, Date.valueOf(keepAlive), user.get("email"));
         return Map.of("ok", true);
+    }
+
+    /** Moderare: scoate poza și descrierea de pe profilul cuiva (ex. o poză nepotrivită). */
+    @PostMapping("/users/{email}/clear-profile")
+    public Map<String, Object> clearProfile(@PathVariable String email) {
+        String target = UserRepository.normalizeEmail(email);
+        db.update("DELETE FROM user_avatars WHERE user_email = ?", target);
+        return result(db.update("UPDATE users SET bio = '', avatar_updated_at = NULL WHERE email = ?", target));
     }
 
     @PostMapping("/users/{email}/password")

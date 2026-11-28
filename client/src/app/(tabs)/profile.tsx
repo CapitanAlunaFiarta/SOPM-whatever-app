@@ -1,8 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Platform, View } from 'react-native';
 
+import { Avatar } from '@/components/Avatar';
+import { BadgeGrid } from '@/components/BadgeGrid';
 import { LanguagePicker } from '@/components/LanguagePicker';
 import { AppText, Badge, Banner, Button, Card, Row, Screen, StatTile, TextField } from '@/components/ui';
 import { useI18n } from '@/i18n';
@@ -11,10 +15,11 @@ import { appBuild, appVersion, isNewerRelease, startUpdate, updateKind } from '@
 import { useAuth } from '@/lib/auth';
 import { disableBiometrics, enableBiometrics, getBiometricStatus } from '@/lib/biometrics';
 import { confirmAction } from '@/lib/dialogs';
-import { useChangePassword, useLatestRelease, useMe } from '@/lib/queries';
+import { useAvatar, useChangePassword, useLatestRelease, useMe, useProfile, useUpdateBio } from '@/lib/queries';
+import type { User } from '@/lib/types';
 
 export default function ProfileScreen() {
-  const { t, tp, formatDate } = useI18n();
+  const { t, tp } = useI18n();
   const { user, signOut } = useAuth();
   const me = useMe();
   const current = me.data ?? user;
@@ -22,21 +27,15 @@ export default function ProfileScreen() {
 
   return (
     <Screen title={t('tabs.profile')} subtitle={`@${current.username}`} refreshing={me.isRefetching} onRefresh={() => me.refetch()}>
-      <Card>
-        <AppText variant="heading">{current.fullName}</AppText>
-        <AppText variant="muted">{current.email}</AppText>
-        <Row style={{ flexWrap: 'wrap' }}>
-          <Badge text={current.role === 'ADMIN' ? t('role.admin') : t('role.user')} tone={current.role === 'ADMIN' ? 'accent' : 'neutral'} />
-          {current.lastActiveOn ? (
-            <Badge text={t('profile.lastActive', { date: formatDate(current.lastActiveOn, { inline: true }) })} />
-          ) : null}
-        </Row>
-      </Card>
+      <ProfileHeader user={current} />
       <Row style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <StatTile label={t('stats.streak')} value={`🔥 ${current.streak}`} hint={tp('plural.days', current.streak)} tone="warning" />
+        <StatTile label={t('stats.streak')} value={`🔥 ${current.streak}`} tone="warning"
+          hint={current.bestStreak && current.bestStreak > current.streak
+            ? t('profile.bestStreak', { days: tp('plural.days', current.bestStreak) }) : tp('plural.days', current.streak)} />
         <StatTile label={t('stats.points')} value={current.points} hint={t('stats.pointsHint')} tone="success" />
         <StatTile label={t('stats.freeze')} value={`${current.freezesLeft}/3`} hint={t('stats.freezeHintRefill')} tone="info" />
       </Row>
+      <MyBadges username={current.username} />
       <Row style={{ flexWrap: 'wrap' }}>
         <View style={{ flex: 1, minWidth: 160 }}>
           <Button variant="secondary" title={t('recap.title')} icon="stats-chart-outline" onPress={() => router.push('/recap')} />
@@ -59,6 +58,111 @@ export default function ProfileScreen() {
       }} />
     </Screen>
   );
+}
+
+/** Poza (din galerie, decupată pătrat), numele, emailul și descrierea scurtă de pe profil. */
+function ProfileHeader({ user }: { user: User }) {
+  const { t, formatDate } = useI18n();
+  const avatar = useAvatar();
+  const updateBio = useUpdateBio();
+  const [editing, setEditing] = useState(false);
+  const [bio, setBio] = useState(user.bio ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const pickPhoto = async () => {
+    setError(null);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], shape: 'oval', quality: 1,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      // Pătratul din centru, cel mult 512 px (serverul îl reface oricum la 256×256 și scoate metadatele).
+      const context = ImageManipulator.manipulate(asset.uri);
+      const side = Math.min(asset.width || 0, asset.height || 0);
+      if (side > 0 && asset.width !== asset.height) {
+        context.crop({ originX: Math.floor((asset.width - side) / 2), originY: Math.floor((asset.height - side) / 2), width: side, height: side });
+      }
+      if (side === 0 || side > 512) context.resize({ width: 512 });
+      const image = await context.renderAsync();
+      const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85, base64: true });
+      if (!saved.base64) throw new Error(t('error.unexpected'));
+      await avatar.mutateAsync(saved.base64);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const removePhoto = async () => {
+    if (!(await confirmAction(t('profile.removePhotoTitle'), t('profile.removePhotoText'), t('profile.removePhoto')))) return;
+    setError(null);
+    try {
+      await avatar.mutateAsync(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const saveBio = async () => {
+    setError(null);
+    try {
+      const saved = await updateBio.mutateAsync(bio.trim());
+      setBio(saved.bio ?? '');
+      setEditing(false);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  return (
+    <Card>
+      <Row gap={14}>
+        <Avatar username={user.username} name={user.fullName} version={user.avatarVersion} size={72} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <AppText variant="heading">{user.fullName}</AppText>
+          <AppText variant="muted">{user.email}</AppText>
+          <Row style={{ flexWrap: 'wrap' }} gap={6}>
+            <Badge text={user.role === 'ADMIN' ? t('role.admin') : t('role.user')} tone={user.role === 'ADMIN' ? 'accent' : 'neutral'} />
+            {user.lastActiveOn ? (
+              <Badge text={t('profile.lastActive', { date: formatDate(user.lastActiveOn, { inline: true }) })} />
+            ) : null}
+          </Row>
+        </View>
+      </Row>
+      <Row style={{ flexWrap: 'wrap' }} gap={8}>
+        <Button compact variant="secondary" icon="image-outline" loading={avatar.isPending}
+          title={user.avatarVersion ? t('profile.changePhoto') : t('profile.addPhoto')} onPress={pickPhoto} />
+        {user.avatarVersion ? <Button compact variant="ghost" title={t('profile.removePhoto')} onPress={removePhoto} /> : null}
+      </Row>
+      {error ? <Banner text={error} onClose={() => setError(null)} /> : null}
+      {editing ? (
+        <View style={{ gap: 8 }}>
+          <TextField label={t('profile.bioLabel')} value={bio} onChangeText={setBio} maxLength={160} multiline
+            placeholder={t('profile.bioPlaceholder')} />
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <AppText variant="small">{bio.length}/160</AppText>
+            <Row gap={8}>
+              <Button compact variant="ghost" title={t('common.cancel')} onPress={() => { setBio(user.bio ?? ''); setEditing(false); }} />
+              <Button compact icon="checkmark" title={t('profile.saveBio')} loading={updateBio.isPending} onPress={saveBio} />
+            </Row>
+          </Row>
+        </View>
+      ) : (
+        <View style={{ gap: 6 }}>
+          <AppText variant={user.bio ? 'body' : 'muted'}>{user.bio || t('profile.bioEmpty')}</AppText>
+          <Button compact variant="ghost" icon="create-outline" title={user.bio ? t('profile.editBio') : t('profile.addBio')}
+            onPress={() => { setBio(user.bio ?? ''); setEditing(true); }} style={{ alignSelf: 'flex-start' }} />
+        </View>
+      )}
+    </Card>
+  );
+}
+
+/** Toate insignele mele, cu progresul (le calculează serverul pe profilul public). */
+function MyBadges({ username }: { username: string }) {
+  const profile = useProfile(username);
+  if (!profile.data?.badges) return null;
+  return <BadgeGrid badges={profile.data.badges} showLocked />;
 }
 
 function BiometricsCard({ userId }: { userId: number }) {

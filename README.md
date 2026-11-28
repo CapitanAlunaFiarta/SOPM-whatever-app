@@ -61,6 +61,16 @@ Aplicația e în română, engleză și spaniolă.
   - La final, o activitate fără locație sau biometrie se confirmă singură; celelalte se confirmă cu un buton, cu verificările obișnuite.
   - Pe iOS ar fi nevoie de API-ul Screen Time (Family Controls), pentru care Apple cere o aprobare specială, iar un browser nu
     poate vedea alte aplicații. De aceea butonul Focus apare doar în APK-ul de Android (nici în Expo Go).
+- **Profil**: poză (aleasă din galerie, decupată pătrat) și o descriere scurtă (160 de caractere).
+  - Serverul recodează orice JPEG/PNG la un JPEG de 256×256, fără metadate (EXIF, locație), și refuză imaginile prea mari
+    sau cu dimensiuni absurde înainte să le decodeze. Poza e publică la `GET /api/avatars/<username>` (linkul are versiunea,
+    deci se poate ține în cache) și apare pe profil, la prieteni, în clasament și la membrii unei activități.
+  - Administratorul poate scoate poza și descrierea cuiva (moderare).
+- **Insigne** (18): calculate din istoric (finalizări, cea mai lungă serie, categorii, prieteni, favoruri, activități de grup,
+  ora finalizării), deci apar și pentru ce s-a întâmplat înainte de ele. Pe profilul meu se văd toate, cu progresul; pe al
+  altcuiva, doar cele câștigate. Cea mai lungă serie se păstrează în `users.best_streak` (migrarea `009`, completată din istoric).
+- **Harta zilelor active** (în recap, ca pe GitHub): câte activități ai finalizat în fiecare zi din ultimele luni
+  (`GET /api/tasks/calendar/activity?weeks=N`); încap atâtea săptămâni câte permite ecranul.
 - **Limbi**: română, engleză, spaniolă. Aplicația pornește în limba telefonului/browserului (altfel engleză) și ține minte
   alegerea din Profil sau de pe ecranele de autentificare. Trimite `Accept-Language`, iar serverele traduc mesajele de eroare
   (`i18n/messages.tsv` din fiecare serviciu) și emailul de resetare a parolei.

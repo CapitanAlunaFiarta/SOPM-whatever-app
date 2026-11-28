@@ -54,3 +54,10 @@ Nu ai o cerere de prietenie de la acest utilizator.	You don't have a friend requ
 Nu ai încă un streak de arătat. Finalizează o activitate azi.	You don't have a streak to show yet. Complete an activity today.	Todavía no tienes una racha que mostrar. Completa una actividad hoy.
 Mesajul nu există.	This message doesn't exist.	El mensaje no existe.
 Poți șterge doar mesajele tale.	You can only delete your own messages.	Solo puedes eliminar tus propios mensajes.
+Alege o poză.	Choose a photo.	Elige una foto.
+Poza nu este validă.	The photo is not valid.	La foto no es válida.
+Poza e prea mare (cel mult 2 MB).	The photo is too large (2 MB at most).	La foto es demasiado grande (2 MB como máximo).
+Poza trebuie să fie JPEG sau PNG.	The photo must be a JPEG or PNG.	La foto debe ser JPEG o PNG.
+Poza trebuie să aibă între 32 și 4096 de pixeli pe latură.	The photo must be between 32 and 4096 pixels on each side.	La foto debe tener entre 32 y 4096 píxeles por lado.
+Utilizatorul nu are poză de profil.	This user has no profile photo.	Este usuario no tiene foto de perfil.
+Descrierea poate avea cel mult 160 de caractere.	The description can have at most 160 characters.	La descripción puede tener como máximo 160 caracteres.

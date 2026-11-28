@@ -88,6 +88,12 @@ export function shiftMonth(month: string, delta: number): string {
 }
 
 /** „Noiembrie 2026”, „November 2026”, „Noviembre de 2026”. */
+/** Numele scurt al lunii (YYYY-MM), fără an: „nov.”, „Nov”, „nov”. */
+export function shortMonthLabel(month: string, language: Language = 'ro'): string {
+  const value = Number(month.split('-')[1]) || 1;
+  return SHORT_MONTHS[language][value - 1] ?? month;
+}
+
 export function monthLabel(month: string, language: Language = 'ro'): string {
   const [year, value] = month.split('-').map(Number);
   const name = MONTHS[language][(value || 1) - 1] ?? month;

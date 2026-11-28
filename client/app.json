@@ -2,7 +2,7 @@
   "expo": {
     "name": "Whatever",
     "slug": "whatever-app",
-    "version": "2.6.0",
+    "version": "2.7.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "whatever",
@@ -76,6 +76,14 @@
           "cameraPermission": "Whatever folosește camera doar ca să confirmi un favor cu o poză făcută la locul stabilit.",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Whatever folosește pozele doar ca să îți alegi poza de profil.",
+          "cameraPermission": "Whatever folosește camera doar ca să confirmi un favor cu o poză făcută la locul stabilit.",
+          "microphonePermission": false
         }
       ]
     ],

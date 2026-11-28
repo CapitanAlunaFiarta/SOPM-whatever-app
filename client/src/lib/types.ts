@@ -11,6 +11,12 @@ export type User = {
   freezesLeft: number;
   biometricEnabled: boolean;
   lastActiveOn: string | null;
+  /** Descrierea scurtă de pe profil (cel mult 160 de caractere). */
+  bio?: string;
+  /** Versiunea pozei de profil (null = fără poză); poza: GET /api/avatars/{username}?v=... */
+  avatarVersion?: number | null;
+  /** Cea mai lungă serie de zile la rând. */
+  bestStreak?: number;
 };
 
 export type Session = {
@@ -57,6 +63,7 @@ export type Task = {
   isOwner: boolean;
   ownerUsername: string;
   ownerName: string;
+  ownerAvatarVersion?: number | null;
   /** Ultima mea confirmare. */
   lastCompletedOn: string | null;
   /** Am confirmat azi. */
@@ -85,6 +92,7 @@ export type ParticipantStatus = 'INVITED' | 'ACCEPTED' | 'DECLINED';
 export type Participant = {
   username: string;
   fullName: string;
+  avatarVersion?: number | null;
   status: ParticipantStatus;
   /** Și-a făcut partea (azi, la activitățile zilnice). */
   confirmed: boolean;
@@ -105,6 +113,7 @@ export type TaskMessage = {
   username: string;
   fullName: string;
   mine: boolean;
+  avatarVersion?: number | null;
 };
 
 /** Pot confirma și deschide chatul: sunt proprietarul sau am acceptat invitația. */
@@ -155,6 +164,7 @@ export type ChatMessage = {
   createdAt: string;
   kind?: ChatKind;
   payload?: Partial<StreakPayload & ActivityPayload & UpdatePayload> | null;
+  senderAvatar?: number | null;
 };
 
 /** Relația mea cu cineva: prieteni, cerere primită (INCOMING) sau trimisă (OUTGOING). */
@@ -166,6 +176,7 @@ export type Friend = {
   fullName: string;
   streak: number;
   points: number;
+  avatarVersion?: number | null;
   status: FriendStatus;
   /** Câmp vechi, păstrat de server pentru aplicațiile mai vechi. */
   direction?: 'incoming' | 'outgoing' | 'mutual';
@@ -184,6 +195,29 @@ export type Profile = {
   memberSince: string | null;
   lastActiveOn: string | null;
   relation: Relation;
+  bio?: string;
+  avatarVersion?: number | null;
+  bestStreak?: number;
+  /** Toate insignele, cu progresul; pe profilul altcuiva aplicația le arată doar pe cele câștigate. */
+  badges?: BadgeProgress[];
+};
+
+/** Insignele (aceleași id-uri ca pe server, în ordinea de pe profil); numele și descrierile vin din i18n. */
+export const BADGE_IDS = [
+  'FIRST_STEP', 'STREAK_3', 'DONE_10', 'STREAK_7', 'FRIENDS_5', 'HELPER', 'TEAM_PLAYER', 'SPORT_10', 'STUDY_10', 'CHORES_10',
+  'FUN_10', 'EARLY_BIRD', 'NIGHT_OWL', 'REGULAR', 'ORGANIZER', 'DONE_50', 'STREAK_30', 'DONE_100',
+] as const;
+export type BadgeId = (typeof BADGE_IDS)[number];
+export type BadgeProgress = { id: BadgeId; earned: boolean; progress: number; goal: number };
+
+/** Harta zilelor active: câte finalizări în fiecare zi, de luni (from) până azi (to). */
+export type ActivityDays = {
+  from: string;
+  to: string;
+  weeks: number;
+  activeDays: number;
+  total: number;
+  days: { date: string; count: number }[];
 };
 
 /** Ce vede oricine din comunitate despre o activitate trimisă acolo. */
@@ -202,6 +236,7 @@ export type ActivityPreview = {
   status: TaskStatus;
   ownerUsername: string;
   ownerName: string;
+  ownerAvatarVersion?: number | null;
   memberCount: number;
   maxMembers: number;
   full: boolean;
@@ -227,6 +262,7 @@ export type LeaderboardEntry = {
   fullName: string;
   streak: number;
   points: number;
+  avatarVersion?: number | null;
 };
 
 export type AdminUser = User & { createdAt: string };

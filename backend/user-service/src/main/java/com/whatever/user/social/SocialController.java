@@ -50,13 +50,14 @@ public class SocialController {
 
     @GetMapping("/leaderboard")
     public List<Map<String, Object>> leaderboard() {
-        return db.queryForList("SELECT username, full_name, streak, last_streak_date, points FROM users").stream()
+        return db.queryForList("SELECT username, full_name, streak, last_streak_date, points, avatar_updated_at FROM users").stream()
                 .map(row -> {
                     Map<String, Object> entry = new LinkedHashMap<>();
                     entry.put("username", row.get("username"));
                     entry.put("fullName", row.get("full_name"));
                     entry.put("streak", users.effectiveStreak(row));
                     entry.put("points", UserRepository.intValue(row.get("points")));
+                    entry.put("avatarVersion", UserRepository.avatarVersion(row.get("avatar_updated_at")));
                     return entry;
                 })
                 .sorted(Comparator.<Map<String, Object>>comparingInt(entry -> (Integer) entry.get("streak")).reversed()
@@ -68,8 +69,9 @@ public class SocialController {
 
     @GetMapping("/chat")
     public List<Map<String, Object>> chat() {
-        return db.queryForList("SELECT id, sender_username, sender_name, sender_role, message_text, created_at, kind, payload "
-                        + "FROM chat_messages ORDER BY id DESC LIMIT 200").stream()
+        return db.queryForList("SELECT c.id, c.sender_username, c.sender_name, c.sender_role, c.message_text, c.created_at, c.kind, "
+                        + "c.payload, u.avatar_updated_at FROM chat_messages c LEFT JOIN users u ON u.username = c.sender_username "
+                        + "ORDER BY c.id DESC LIMIT 200").stream()
                 .map(row -> {
                     String createdAt = UserRepository.isoInstant(row.get("created_at"));
                     Map<String, Object> message = new LinkedHashMap<>();
@@ -82,6 +84,7 @@ public class SocialController {
                     message.put("createdAt", createdAt);
                     message.put("kind", row.get("kind") == null ? "TEXT" : row.get("kind"));
                     message.put("payload", payload(row.get("payload")));
+                    message.put("senderAvatar", UserRepository.avatarVersion(row.get("avatar_updated_at")));
                     return message;
                 })
                 .toList();
