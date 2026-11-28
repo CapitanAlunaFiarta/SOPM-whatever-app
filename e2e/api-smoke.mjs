@@ -463,6 +463,13 @@ async function main() {
   const posted = await call('POST', `${USER}/chat`, { token: tokenA, body: { text: 'Salut din CI' } });
   const chat = await call('GET', `${USER}/chat`, { token: tokenB });
   check('chat cu timestamp ISO', posted.status === 200 && chat.json?.[0]?.text === 'Salut din CI' && /T.*Z$/.test(chat.json?.[0]?.createdAt || ''), chat.json?.[0]);
+  const typo = await call('POST', `${USER}/chat`, { token: tokenA, body: { text: 'Mesaj cu greșeală' } });
+  const typoId = (await call('GET', `${USER}/chat`, { token: tokenA })).json?.find((m) => m.text === 'Mesaj cu greșeală')?.id;
+  const deleteOthers = await call('DELETE', `${USER}/chat/${typoId}`, { token: tokenB });
+  const deleteOwn = await call('DELETE', `${USER}/chat/${typoId}`, { token: tokenA });
+  const afterDelete = await call('GET', `${USER}/chat`, { token: tokenA });
+  check('îți poți șterge mesajele tale, nu și pe ale altora', typo.status === 200 && deleteOthers.status === 403
+    && deleteOwn.status === 200 && !afterDelete.json?.some((m) => m.id === typoId), [deleteOthers.status, deleteOwn.status]);
 
   // --- admin
   let adminLogin = { status: 0 };

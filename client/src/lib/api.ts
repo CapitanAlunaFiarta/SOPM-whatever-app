@@ -67,9 +67,40 @@ export async function endSession(): Promise<void> {
   }
 }
 
+/*
+ * Cereri lente: pe planul gratuit Render serverul doarme după 15 minute fără folosire și prima cerere
+ * durează până la un minut. Cât timp o citire așteaptă de peste SLOW_AFTER_MS, aplicația arată un mesaj.
+ */
+const SLOW_AFTER_MS = 4_000;
+const pendingReads = new Map<number, number>();
+const slowListeners = new Set<() => void>();
+let nextRead = 1;
+let slow = false;
+
+function updateSlow() {
+  const now = Date.now();
+  const value = [...pendingReads.values()].some((startedAt) => now - startedAt >= SLOW_AFTER_MS);
+  if (value === slow) return;
+  slow = value;
+  slowListeners.forEach((listener) => listener());
+}
+
+/** Pentru useSyncExternalStore: e vreo citire care așteaptă de mult? */
+export const isWaitingForServer = () => slow;
+export function subscribeWaitingForServer(listener: () => void) {
+  slowListeners.add(listener);
+  return () => {
+    slowListeners.delete(listener);
+  };
+}
+
 async function send(service: ApiService, path: string, options: RequestOptions, withAuth: boolean): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // Doar citirile (și reîmprospătarea sesiunii): o poză încărcată pe o rețea lentă nu înseamnă că serverul doarme.
+  const read = (options.method ?? 'GET') === 'GET' || path === '/users/refresh' ? nextRead++ : 0;
+  const slowTimer = read ? setTimeout(updateSlow, SLOW_AFTER_MS) : undefined;
+  if (read) pendingReads.set(read, Date.now());
   try {
     return await fetch(`${API_URLS[service]}${path}`, {
       method: options.method ?? 'GET',
@@ -86,6 +117,11 @@ async function send(service: ApiService, path: string, options: RequestOptions, 
     throw new ApiError(0, translate('error.network'));
   } finally {
     clearTimeout(timer);
+    if (read) {
+      clearTimeout(slowTimer);
+      pendingReads.delete(read);
+      updateSlow();
+    }
   }
 }
 

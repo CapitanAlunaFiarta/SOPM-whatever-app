@@ -501,6 +501,17 @@ export const en: Dictionary = {
   'update.update': 'Update',
   // Versiunea cea mai nouă
   'update.newestIs': 'Version {version} has come out since.',
+  // Optimizări: server care pornește, clasament, share
+  'server.waking': 'The server is waking up after a break (on the free plan it sleeps after 15 idle minutes). It can take up to a minute…',
+  'leaderboard.all': 'Everyone',
+  'leaderboard.friendsOnly': 'My friends',
+  'leaderboard.noFriends': 'Add friends to compare your streaks.',
+  'share.streak': 'Share your streak',
+  'share.streakText': 'I have a streak of {days} in Whatever! 🔥 {url}',
+  'share.copied': 'Copied. Paste it wherever you like.',
+  'home.streakRisk': 'You have until midnight to keep your streak!',
+  // Profilul public al meu
+  'profile.publicView': 'How others see me',
   'plural.days': { one: '{count} day', other: '{count} days' },
   'plural.points': { one: '{count} point', other: '{count} points' },
   'plural.accounts': { one: '{count} account', other: '{count} accounts' },

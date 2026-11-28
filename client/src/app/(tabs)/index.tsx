@@ -4,12 +4,15 @@ import { View } from 'react-native';
 import { JoinRequests } from '@/components/JoinRequests';
 import { ProgressRing } from '@/components/ProgressRing';
 import { TaskCard } from '@/components/TaskCard';
-import { AppText, Banner, Button, Card, EmptyState, Row, Screen, StatTile } from '@/components/ui';
+import { colors } from '@/components/theme';
+import { AppText, Banner, Button, Card, EmptyState, IconButton, Row, Screen, StatTile } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { localDate, monthKey } from '@/lib/dates';
+import { showMessage } from '@/lib/dialogs';
 import { useFavors, useFriends, useMe, useRecap, useTasks } from '@/lib/queries';
+import { APP_URL, shareText } from '@/lib/share';
 import { favorNeedsMe, isMember, type Task } from '@/lib/types';
 
 // De făcut: activități active la care sunt membru și la care nu mi-am făcut încă partea.
@@ -39,6 +42,8 @@ export default function HomeScreen() {
   // activitățile zilnice). Activitățile programate pentru zilele următoare nu intră în calcul.
   const today = localDate();
   const doneToday = mine.filter((task) => task.completedToday).length;
+  // Seara (de la 18:00), un streak fără nicio activitate confirmată azi e în pericol: îl spunem clar.
+  const streakAtRisk = streak > 0 && doneToday === 0 && new Date().getHours() >= 18;
   const planned = doneToday + open.filter((task) => task.dueDate <= today).length;
   const percent = planned > 0 ? Math.round((doneToday / planned) * 100) : null;
   const progressText = planned === 0 ? t('home.progressNone')
@@ -62,9 +67,18 @@ export default function HomeScreen() {
             <AppText variant="muted">{t('home.progressTitle')}</AppText>
             <AppText variant="heading">{tasks.isLoading ? t('common.loading') : progressText}</AppText>
             <AppText variant="muted" style={{ marginTop: 8 }}>{t('stats.streak')}</AppText>
-            <AppText variant="big">🔥 {tp('plural.days', streak)}</AppText>
-            <AppText variant="small">
-              {doneToday > 0 ? t('home.streakSafe') : streak > 0 ? t('home.streakKeep') : t('home.streakStart')}
+            <Row gap={6}>
+              <AppText variant="big">🔥 {tp('plural.days', streak)}</AppText>
+              {streak > 0 ? (
+                <IconButton icon="share-social-outline" label={t('share.streak')} tone="accent" onPress={async () => {
+                  const message = t('share.streakText', { days: tp('plural.days', streak), url: APP_URL });
+                  if ((await shareText(message).catch(() => 'dismissed')) === 'copied') showMessage(t('share.streak'), t('share.copied'));
+                }} />
+              ) : null}
+            </Row>
+            <AppText variant="small" style={streakAtRisk ? { color: colors.amber, fontWeight: '700' } : undefined}>
+              {doneToday > 0 ? t('home.streakSafe') : streakAtRisk ? t('home.streakRisk')
+                : streak > 0 ? t('home.streakKeep') : t('home.streakStart')}
             </AppText>
           </View>
         </Row>

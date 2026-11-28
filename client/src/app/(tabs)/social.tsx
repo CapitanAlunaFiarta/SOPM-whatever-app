@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -9,7 +10,7 @@ import { FavorsSection } from '@/components/FavorsSection';
 import { openProfile } from '@/components/JoinRequests';
 import { colors, radius } from '@/components/theme';
 import {
-  AppText, Badge, Banner, Button, Card, EmptyState, type IconName, Row, Screen, Segmented, TextField,
+  AppText, Badge, Banner, Button, Card, ChipGroup, EmptyState, type IconName, Row, Screen, Segmented, TextField,
 } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { errorMessage } from '@/lib/api';
@@ -37,8 +38,16 @@ export default function SocialScreen() {
     setRequested(params.section);
     if (isSection(params.section)) setSection(params.section);
   }
+  // Trage în jos ca să reîmprospătezi tot ce e pe ecran (chaturi, prieteni, favoruri, clasament).
+  const client = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    setRefreshing(true);
+    await client.refetchQueries({ type: 'active' }).catch(() => undefined);
+    setRefreshing(false);
+  };
   return (
-    <Screen title={t('social.title')} subtitle={t('social.subtitle')}>
+    <Screen title={t('social.title')} subtitle={t('social.subtitle')} refreshing={refreshing} onRefresh={refresh}>
       <Segmented value={section} onChange={setSection} options={[
         { value: 'chat', label: t('social.chat'), icon: 'chatbubbles-outline' },
         { value: 'friends', label: t('social.friends'), icon: 'people-outline' },
@@ -241,11 +250,19 @@ function LeaderboardSection() {
   const { t, tp } = useI18n();
   const { user } = useAuth();
   const leaderboard = useLeaderboard();
+  const friends = useFriends();
+  const [scope, setScope] = useState<'all' | 'friends'>('all');
+  const friendNames = new Set((friends.data ?? []).filter(isFriend).map((friend) => friend.username));
+  const entries = (leaderboard.data ?? [])
+    .filter((entry) => scope === 'all' || entry.username === user?.username || friendNames.has(entry.username));
   return (
     <View style={{ gap: 8 }}>
       {leaderboard.error ? <Banner text={errorMessage(leaderboard.error)} /> : null}
+      <ChipGroup options={['all', 'friends'] as const} value={scope} onChange={setScope}
+        labels={{ all: t('leaderboard.all'), friends: t('leaderboard.friendsOnly') }} />
+      {scope === 'friends' && friendNames.size === 0 ? <AppText variant="small">{t('leaderboard.noFriends')}</AppText> : null}
       <Card style={{ gap: 0, paddingVertical: 4 }}>
-        {(leaderboard.data ?? []).map((entry, index) => {
+        {entries.map((entry, index) => {
           const me = entry.username === user?.username;
           return (
             <Pressable key={entry.username} accessibilityRole="link" accessibilityLabel={t('chat.openProfile', { name: entry.fullName })}

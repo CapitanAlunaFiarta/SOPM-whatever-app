@@ -315,6 +315,8 @@ if (ok) {
     await api('user', '/friends', { token, body: { username: me.username } });
     await page.goto(BASE);
     await waitPath('/');
+    // Tab-ul Social arată că ceva așteaptă după tine.
+    await visible(page.getByRole('tab', { name: /Social/ })).filter({ hasText: '1' }).first().waitFor();
     await openTab('Social', '/social');
     await visible(page.getByRole('tab', { name: 'Prieteni' })).click();
     await acceptFriendRequest(friend);

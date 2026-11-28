@@ -1,16 +1,26 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, router, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 
+import { ServerWaking } from '@/components/ServerWaking';
 import { colors } from '@/components/theme';
 import { AppText, Button, IconButton, Loading } from '@/components/ui';
 import { I18nProvider, useI18n } from '@/i18n';
 import { AuthProvider, useAuth } from '@/lib/auth';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+// Pe telefon, „fereastra în focus” = aplicația e în prim-plan: în fundal nu se mai interoghează serverul,
+// iar la revenire datele se reîmprospătează imediat (pe web, React Query urmărește singur fereastra).
+if (Platform.OS !== 'web') {
+  focusManager.setEventListener((setFocused) => {
+    const subscription = AppState.addEventListener('change', (state) => setFocused(state === 'active'));
+    return () => subscription.remove();
+  });
+}
 
 /** Butonul „X” al ecranelor modale; funcționează și când ecranul a fost deschis direct (link, refresh). */
 function closeModal() {
@@ -106,6 +116,7 @@ function RootNavigator() {
         <Stack.Screen name="reset" />
       </Stack>
 
+      {status === 'signedIn' && <ServerWaking />}
       {status === 'loading' && (
         <View style={styles.overlay}>
           <Loading text={t('root.restoring')} />
